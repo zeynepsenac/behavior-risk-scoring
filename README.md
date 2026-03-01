@@ -10,3 +10,4 @@ to simulate realistic financial behavior patterns.
 
 No real customer data was used in this project.
 All data is fully synthetic and compliant with KVKK and GDPR regulations.
+

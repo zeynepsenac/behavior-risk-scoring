@@ -1,16 +1,13 @@
 import numpy as np
 import pandas as pd
 
-# Tekrar üretilebilirlik
 np.random.seed(42)
 
-N = 1200  # jüriye "1000+" net mesaj
+N = 1200  
 
-# Temel demografik / finansal yapı
 monthly_income = np.random.normal(30000, 9000, N).clip(12000, 120000)
 income_variance = np.random.uniform(0.05, 0.4, N)
 
-# Davranışsal değişkenler (korelasyonlu)
 bill_payment_delay_avg = np.random.exponential(
     scale=2 + income_variance * 5, size=N
 ).clip(0, 30)
@@ -34,6 +31,13 @@ risk_score = (
     (employment_duration / 12)
 ).clip(0, 100)
 
+# 🔹 Risk bandı ekleme (Low / Medium / High)
+risk_band = pd.cut(
+    risk_score,
+    bins=[-1, 30, 60, 100],
+    labels=["Low", "Medium", "High"]
+)
+
 data = {
     "customer_id": range(1, N + 1),
     "monthly_income": monthly_income.round(2),
@@ -44,11 +48,12 @@ data = {
     "savings_rate": savings_rate.round(2),
     "employment_duration_months": employment_duration,
     "account_age_months": account_age,
-    "risk_score": risk_score.round(0)
+    "risk_score": risk_score.round(0),
+    "risk_band": risk_band
 }
 
 df = pd.DataFrame(data)
 
 df.to_csv("data/synthetic_customers.csv", index=False)
 
-print(f" {N} adet açıklanabilir sentetik müşteri verisi üretildi.")
+print(f"{N} adet açıklanabilir sentetik müşteri verisi üretildi (risk bandları dahil).")
