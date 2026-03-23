@@ -304,3 +304,6 @@ def explain_customer(customer_id: int):
         "top_risk_factors": top_risk_factors,
         "natural_language_explanation": explanation_text
     }
+
+
+    # github test
