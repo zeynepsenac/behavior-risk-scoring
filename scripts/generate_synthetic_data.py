@@ -19,10 +19,10 @@ missed_payments_6m = (
 spending_ratio = np.random.uniform(0.3, 1.1, N)
 savings_rate = (1 - spending_ratio + np.random.normal(0, 0.05, N)).clip(0, 0.4)
 
-employment_duration = np.random.randint(3, 300, N)  # ay
-account_age = np.random.randint(6, 240, N)  # ay
+employment_duration = np.random.randint(3, 300, N)  
+account_age = np.random.randint(6, 240, N)  
 
-# Basit ama anlamlı risk skoru (kural tabanlı altyapı)
+
 risk_score = (
     (missed_payments_6m * 12) +
     (bill_payment_delay_avg * 1.5) +
@@ -31,11 +31,11 @@ risk_score = (
     (employment_duration / 12)
 ).clip(0, 100)
 
-# 🔹 Risk bandı ekleme (Low / Medium / High)
+
 risk_band = pd.cut(
     risk_score,
-    bins=[-1, 30, 60, 100],
-    labels=["Low", "Medium", "High"]
+    bins=[-1, 50, 75, 100],
+    labels=["High", "Medium", "Low"]
 )
 
 data = {

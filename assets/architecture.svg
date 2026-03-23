@@ -1,0 +1,71 @@
+<svg width="900" height="420" xmlns="http://www.w3.org/2000/svg">
+
+<style>
+    .box {
+        fill: #f8fafc;
+        stroke: #334155;
+        stroke-width: 2;
+        rx: 10;
+        ry: 10;
+    }
+
+    .title {
+        font-family: Arial;
+        font-size: 18px;
+        font-weight: bold;
+        fill: #0f172a;
+        text-anchor: middle;
+    }
+
+    .arrow {
+        stroke: #475569;
+        stroke-width: 2;
+        marker-end: url(#arrowhead);
+    }
+</style>
+
+<defs>
+  <marker id="arrowhead" markerWidth="10" markerHeight="7"
+          refX="10" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>
+  </marker>
+</defs>
+
+<!-- Boxes -->
+
+<rect class="box" x="40" y="160" width="150" height="60"/>
+<text class="title" x="115" y="195">Synthetic Data</text>
+
+<rect class="box" x="210" y="160" width="170" height="60"/>
+<text class="title" x="295" y="195">Feature Engineering</text>
+
+<rect class="box" x="400" y="160" width="150" height="60"/>
+<text class="title" x="475" y="195">Risk Scoring</text>
+
+<rect class="box" x="570" y="160" width="160" height="60"/>
+<text class="title" x="650" y="195">Explainability</text>
+
+<rect class="box" x="750" y="160" width="120" height="60"/>
+<text class="title" x="810" y="195">FastAPI API</text>
+
+<!-- Arrows -->
+
+<line class="arrow" x1="190" y1="190" x2="210" y2="190"/>
+<line class="arrow" x1="380" y1="190" x2="400" y2="190"/>
+<line class="arrow" x1="550" y1="190" x2="570" y2="190"/>
+<line class="arrow" x1="730" y1="190" x2="750" y2="190"/>
+
+<!-- Title -->
+
+<text x="450" y="60"
+      font-family="Arial"
+      font-size="24"
+      font-weight="bold"
+      text-anchor="middle"
+      fill="#020617">
+
+Behavior-Based Micro Risk Scoring Architecture
+
+</text>
+
+</svg>

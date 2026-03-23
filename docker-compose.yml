@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+
+  api:
+    build: .
+    container_name: behavior_api
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      - postgres
+
+    #  Docker içi database erişimi
+    environment:
+      # eski yapı (bozmuyoruz)
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/riskdb
+
+      #  YENİ — auto config için
+      DB_HOST: postgres
+      DB_NAME: riskdb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_PORT: 5432
+
+    volumes:
+      - .:/app
+
+
+  postgres:
+    image: postgres:15
+    container_name: risk_postgres
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: riskdb
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d
+
+
+volumes:
+  postgres_data:
