@@ -1,4 +1,4 @@
-CREATE TABLE prediction_history (
+CREATE TABLE IF NOT EXISTS prediction_history (
     prediction_id BIGSERIAL PRIMARY KEY,
     customer_id INT NOT NULL,
     risk_score NUMERIC(5,2) NOT NULL,

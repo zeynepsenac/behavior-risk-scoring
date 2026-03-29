@@ -34,13 +34,16 @@ from src.database import load_customers, get_db_connection
 # =====================================================
 app = FastAPI(
     title="Explainable AI Behavioral Risk Scoring API",
-    version="1.6.5"
+    version="2.0.0"
 )
 
 # =====================================================
 # MODEL
 # =====================================================
 model = joblib.load("models/risk_model.pkl")
+
+MODEL_VERSION = "1.0.0"
+FEATURE_VERSION = "1.0.0"
 
 # =====================================================
 # THREAD POOL
@@ -60,14 +63,34 @@ FEATURES = [
 
 FEATURE_COUNT = len(FEATURES)
 
-# =====================================================
-# BUFFER
-# =====================================================
 _prediction_buffer = np.zeros((1, FEATURE_COUNT), dtype=np.float32)
 buffer_lock = Lock()
 
 prediction_cache = {}
 cache_lock = Lock()
+
+
+# =====================================================
+# FEATURE BUILDER
+# =====================================================
+def build_features(row, features):
+
+    values = []
+
+    for f in features:
+        v = row.get(f, 0)
+
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            v = 0
+
+        try:
+            v = float(v)
+        except Exception:
+            v = 0.0
+
+        values.append(v)
+
+    return np.array(values, dtype=np.float32)
 
 
 def cache_key(values):
@@ -96,7 +119,7 @@ def fast_predict(values):
 
 
 # =====================================================
-# DB LOGGER
+# AUDIT LOGGER
 # =====================================================
 def log_prediction(customer_id, values, score, segment, endpoint):
     try:
@@ -106,19 +129,23 @@ def log_prediction(customer_id, values, score, segment, endpoint):
         cur.execute("""
             INSERT INTO prediction_history(
                 customer_id,
+                risk_score,
+                risk_band,
+                model_version,
+                feature_version,
                 endpoint,
                 features,
-                predicted_score,
-                risk_band,
                 created_at
             )
-            VALUES (%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             customer_id,
+            float(score),
+            segment,
+            MODEL_VERSION,
+            FEATURE_VERSION,
             endpoint,
             json.dumps(values),
-            score,
-            segment,
             datetime.utcnow()
         ))
 
@@ -131,6 +158,29 @@ def log_prediction(customer_id, values, score, segment, endpoint):
 
 
 # =====================================================
+# 🔥 LOAD ENGINEERED FEATURES (CRITICAL FIX)
+# =====================================================
+def load_engineered_features():
+
+    conn = get_db_connection()
+
+    query = """
+        SELECT
+            customer_id,
+            payment_discipline_score,
+            income_stability_index,
+            financial_resilience_score
+        FROM engineered_features
+    """
+
+    df = pd.read_sql(query, conn)
+
+    conn.close()
+
+    return df
+
+
+# =====================================================
 # STARTUP
 # =====================================================
 @app.on_event("startup")
@@ -138,20 +188,23 @@ def startup_event():
 
     global df
 
-    print("Loading customers from DB...")
+    print("\nLoading engineered features from DB...")
 
-    df = load_customers()
+    df = load_engineered_features()
 
     if df is None or df.empty:
-        print("⚠️ No customers loaded!")
+        print("⚠️ No engineered features loaded!")
         return
 
     print(f"✅ Loaded {len(df)} customers")
 
+    # ✅ LIME NOW USES CORRECT DATA
     initialize_explainer(df, FEATURES)
 
+    # warmup prediction
     try:
-        _prediction_buffer[0, :] = df.iloc[0][FEATURES].values
+        sample = build_features(df.iloc[0], FEATURES)
+        _prediction_buffer[0, :] = sample
         model.predict(_prediction_buffer)
     except Exception:
         pass
@@ -164,7 +217,7 @@ def ensure_data_loaded():
     if df is None or df.empty:
         raise HTTPException(
             status_code=500,
-            detail="Customer dataset not loaded"
+            detail="Dataset not loaded"
         )
 
 
@@ -207,10 +260,7 @@ def get_risk_score(customer_id: int):
 
     row = customer.iloc[0]
 
-    values = np.array(
-        [float(row[f]) for f in FEATURES],
-        dtype=np.float32
-    )
+    values = build_features(row, FEATURES)
 
     score = fast_predict(values)
     segment = risk_segment(score)
@@ -226,16 +276,15 @@ def get_risk_score(customer_id: int):
         "risk_color": risk_color(segment),
         "risk_band": band,
         "components": {
-            "payment_discipline_score": float(values[0]),
-            "income_stability_index": float(values[1]),
-            "financial_resilience_score": float(values[2]),
+            FEATURES[i]: float(values[i])
+            for i in range(len(FEATURES))
         },
         "timestamp": datetime.utcnow()
     }
 
 
 # =====================================================
-# EXPLAIN  ✅ FINAL FIX
+# EXPLAIN
 # =====================================================
 @app.get("/explain/{customer_id}", response_model=ExplainResponse)
 def explain_customer(customer_id: int):
@@ -249,46 +298,20 @@ def explain_customer(customer_id: int):
 
     row = customer.iloc[0]
 
-    values = np.array(
-        [float(row[f]) for f in FEATURES],
-        dtype=np.float32
-    )
+    values = build_features(row, FEATURES)
 
     score = fast_predict(values)
     segment = risk_segment(score)
 
     lime_exp = explain_instance(row[FEATURES], model)
 
-    if hasattr(lime_exp, "as_list"):
-        lime_exp = lime_exp.as_list()
-
-    # ✅ SAFE LIME PARSER (CRASH FIX)
-    contributions = []
-
-    for item in lime_exp:
-
-        if isinstance(item, tuple) and len(item) == 2:
-            feature_text, impact = item
-
-        elif isinstance(item, dict):
-            feature_text = item.get("feature", "")
-            impact = item.get("impact", 0)
-
-        else:
-            continue
-
-        try:
-            impact_value = float(impact)
-        except (ValueError, TypeError):
-            impact_value = 0.0
-
-        contributions.append({
-            "feature": str(feature_text),
-            "impact": impact_value
-        })
-
-    # ✅ SCHEMA FIX (OBJECT LIST)
-    top_risk_factors = contributions[:3]
+    contributions = [
+        {
+            "feature": str(item["feature"]),
+            "impact": float(item["impact"])
+        }
+        for item in lime_exp
+    ]
 
     explanation_text = ", ".join(rule_engine(row))
 
@@ -301,9 +324,6 @@ def explain_customer(customer_id: int):
         "risk_label": segment,
         "risk_color": risk_color(segment),
         "feature_contributions": contributions,
-        "top_risk_factors": top_risk_factors,
+        "top_risk_factors": contributions[:3],
         "natural_language_explanation": explanation_text
     }
-
-
-    # github test

@@ -2,31 +2,6 @@ version: "3.9"
 
 services:
 
-  api:
-    build: .
-    container_name: behavior_api
-    ports:
-      - "8000:8000"
-
-    depends_on:
-      - postgres
-
-    #  Docker içi database erişimi
-    environment:
-      # eski yapı (bozmuyoruz)
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/riskdb
-
-      #  YENİ — auto config için
-      DB_HOST: postgres
-      DB_NAME: riskdb
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_PORT: 5432
-
-    volumes:
-      - .:/app
-
-
   postgres:
     image: postgres:15
     container_name: risk_postgres
@@ -42,7 +17,46 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/initdb:/docker-entrypoint-initdb.d
+      - ./database:/database
+      - ./data:/data
 
+    # ✅ EKLENDİ — DB hazır mı kontrol eder
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d riskdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: behavior_api
+
+    ports:
+      - "8000:8000"
+
+    # ✅ postgres READY olana kadar bekler
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/riskdb
+      DB_HOST: postgres
+      DB_NAME: riskdb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_PORT: 5432
+
+    volumes:
+      - .:/app
+
+    # ✅ DB hazır olana kadar bekleyen start
+    command: >
+      sh -c "
+      echo 'Waiting for postgres...' &&
+      sleep 5 &&
+      uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
+      "
 
 volumes:
   postgres_data:

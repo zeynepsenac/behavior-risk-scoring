@@ -3,20 +3,43 @@ import pandas as pd
 import urllib
 import psycopg2
 import os
+import socket
 
 
 # =====================================================
-# DATABASE HOST AUTO DETECT (Docker + Local uyumlu)
+# DATABASE HOST AUTO DETECT (Docker + Local SMART MODE)
 # =====================================================
 
-# Docker içindeyse compose env gelir
-# Local çalışıyorsa localhost kullanır
-DB_HOST = os.getenv("DB_HOST", "localhost")
+def detect_db_host():
+    """
+    Öncelik sırası:
+     ENV varsa onu kullan
+     Docker network'te risk_postgres erişilebiliyorsa onu kullan
+     fallback localhost
+    """
+
+    # ENV override (en güvenlisi)
+    env_host = os.getenv("DB_HOST")
+    if env_host:
+        return env_host
+
+    # Docker container DNS test
+    try:
+        socket.gethostbyname("risk_postgres")
+        return "risk_postgres"
+    except socket.error:
+        return "localhost"
+
+
+DB_HOST = detect_db_host()
 
 DB_NAME = os.getenv("DB_NAME", "riskdb")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 DB_PORT = os.getenv("DB_PORT", "5432")
+
+
+print(f" Using DB host: {DB_HOST}")
 
 
 # =====================================================
@@ -45,7 +68,12 @@ DATABASE_URL = (
     f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
-postgres_engine = create_engine(DATABASE_URL)
+postgres_engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,   # connection drop fix
+    pool_size=5,
+    max_overflow=10
+)
 
 TABLE_NAME = "engineered_customers"
 
@@ -62,7 +90,6 @@ def load_customers_postgres():
 def load_customers():
     """
     Projenin ana veri kaynağı.
-    Şu anda PostgreSQL kullanıyor.
     """
     return load_customers_postgres()
 
@@ -75,7 +102,7 @@ def get_db_connection():
     return psycopg2.connect(
         host=DB_HOST,
         port=DB_PORT,
-        dbname=DB_NAME,   # ✅ artık ENV ile aynı
+        dbname=DB_NAME,
         user=DB_USER,
         password=DB_PASSWORD
     )

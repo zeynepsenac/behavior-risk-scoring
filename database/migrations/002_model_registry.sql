@@ -1,4 +1,4 @@
-CREATE TABLE model_registry (
+CREATE TABLE IF NOT EXISTS model_registry (
     model_version VARCHAR(20) PRIMARY KEY,
     model_name VARCHAR(50),
     trained_at TIMESTAMP,
