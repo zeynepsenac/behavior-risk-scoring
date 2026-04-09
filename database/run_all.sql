@@ -23,6 +23,16 @@
 \i /database/migrations/016__add_data_lineage.sql
 \i /database/migrations/017_add_not_null_risk_score.sql
 \i /database/migrations/018_mlops_monitoring.sql
+\i /database/migrations/019_schema_finalization.sql
+\i /database/migrations/020_log_prediction_trigger.sql
+\i /database/migrations/021_finalize_prediction_history_schema.sql
+\i /database/migrations/022_risk_score_constraint_fix.sql
+\i /database/migrations/023_fix_duplicate_feature_version.sql
+\i /database/migrations/024_mlops_schema_stabilization.sql
+\i /database/migrations/025_fix_engineered_features_unique.sql
+\i /database/migrations/026_allow_null_risk_band.sql
 
 \i database/seeds/001_sync_customers.sql
+\i database/seeds/002_sync_engineered_customers.sql
+
 \echo '=== MIGRATIONS FINISHED ==='

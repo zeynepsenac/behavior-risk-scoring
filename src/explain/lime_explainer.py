@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import warnings
+import re
 from lime.lime_tabular import LimeTabularExplainer
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -13,22 +14,25 @@ _feature_names = []
 
 
 # =====================================================
+# FEATURE CLEANER
+# =====================================================
+def clean_lime_feature(feature_text: str) -> str:
+    try:
+        return re.split(r"\s*(<=|>=|<|>)\s*", feature_text)[0]
+    except Exception:
+        return feature_text
+
+
+# =====================================================
 # INITIALIZE (APP STARTUP)
 # =====================================================
 def initialize_explainer(df: pd.DataFrame, features: list):
-    """
-    Initialize LIME explainer safely.
-    NEVER crashes API.
-    """
 
     global _explainer, _feature_names
 
     print("\n🔎 Initializing LIME explainer...")
 
     try:
-        # -------------------------------------------------
-        # VALIDATION
-        # -------------------------------------------------
         if df is None or df.empty:
             print("⚠️ LIME disabled: empty dataframe")
             _explainer = None
@@ -42,30 +46,14 @@ def initialize_explainer(df: pd.DataFrame, features: list):
             _feature_names = []
             return
 
-        # -------------------------------------------------
-        # TRAINING DATA PREP
-        # -------------------------------------------------
         X = df[features].copy()
 
-        print("📊 Raw feature sample:")
-        print(X.head())
-
-        # force numeric
         X = X.apply(pd.to_numeric, errors="coerce")
-
-        # clean NaN / inf
         X = X.replace([np.inf, -np.inf], np.nan)
         X = X.fillna(X.median(numeric_only=True))
         X = X.fillna(0)
 
-        # -------------------------------------------------
-        # VARIANCE CHECK (REAL DEBUG)
-        # -------------------------------------------------
         stds = X.std()
-
-        print("\n📈 Feature std values:")
-        print(stds)
-
         valid_columns = stds[stds > 1e-6].index.tolist()
 
         if len(valid_columns) == 0:
@@ -74,7 +62,6 @@ def initialize_explainer(df: pd.DataFrame, features: list):
             _feature_names = []
             return
 
-        # keep only valid columns
         X = X[valid_columns]
         _feature_names = valid_columns
 
@@ -83,13 +70,10 @@ def initialize_explainer(df: pd.DataFrame, features: list):
         print("✅ Active LIME features:", _feature_names)
         print("✅ Training shape:", training_data.shape)
 
-        # -------------------------------------------------
-        # EXPLAINER INIT
-        # -------------------------------------------------
         _explainer = LimeTabularExplainer(
             training_data=training_data,
             feature_names=_feature_names,
-            mode="regression",
+            mode="classification",
             discretize_continuous=False,
             random_state=42
         )
@@ -112,30 +96,24 @@ def _prepare_instance(row_features):
     if not _feature_names:
         return None
 
-    # dataframe → series
     if isinstance(row_features, pd.DataFrame):
         row_features = row_features.iloc[0]
 
-    # dict → series
     if isinstance(row_features, dict):
         row_features = pd.Series(row_features)
 
     try:
-        # enforce order
         row_features = row_features[_feature_names]
     except Exception:
         return None
 
-    # numeric cleaning
     row_features = pd.to_numeric(row_features, errors="coerce")
     row_features = row_features.replace([np.inf, -np.inf], np.nan)
     row_features = row_features.fillna(0)
 
     arr = row_features.values.astype(np.float32)
-
     arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # prevent zero variance instance
     if np.std(arr) == 0:
         arr = arr + np.random.normal(0, 1e-6, arr.shape)
 
@@ -143,7 +121,10 @@ def _prepare_instance(row_features):
 
 
 # =====================================================
-# EXPLAIN INSTANCE
+# EXPLAIN INSTANCE (MAIN CALL)
+# =====================================================
+# =====================================================
+# EXPLAIN INSTANCE (MAIN CALL)
 # =====================================================
 def explain_instance(row_features, model):
 
@@ -164,17 +145,36 @@ def explain_instance(row_features, model):
                 "impact": 0.0
             }]
 
+        # 🔥🔥🔥 KRİTİK FIX BURASI
+        def predict_fn(x):
+            try:
+                # 👉 regression model output
+                raw = model.predict(x)
+
+                # 👉 normalize (SENİN SİSTEMİNLE UYUMLU)
+                normalized = raw / 25.0
+
+                # 👉 LIME classification bekliyor → 2D probability format
+                return np.vstack([1 - normalized, normalized]).T
+
+            except Exception as e:
+                print("predict_fn error:", e)
+                return np.zeros((len(x), 2))
+
         exp = _explainer.explain_instance(
             data_row=instance,
-            predict_fn=model.predict,
-            num_features=len(_feature_names)
+            predict_fn=predict_fn,
+            num_features=min(5, len(_feature_names))
         )
 
         results = []
 
-        for feature, impact in exp.as_list():
+        # 👉 risk class = 1
+        for feature, impact in exp.as_list(label=1):
+            clean_feature = clean_lime_feature(feature)
+
             results.append({
-                "feature": feature,
+                "feature": clean_feature,
                 "impact": round(float(impact), 4)
             })
 
@@ -187,3 +187,10 @@ def explain_instance(row_features, model):
             "feature": "explanation_failed",
             "impact": 0.0
         }]
+
+
+# =====================================================
+# API COMPATIBILITY WRAPPER
+# =====================================================
+def build_explanation(row_features, model, *args, **kwargs):
+    return explain_instance(row_features, model)

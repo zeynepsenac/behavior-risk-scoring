@@ -12,13 +12,15 @@ params = urllib.parse.quote_plus(
 
 engine = create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
 
+# CSV okunuyor (AYNI KALIYOR)
 df = pd.read_csv("data/engineered_customers.csv")
 
+# ✅ SADECE BURASI DEĞİŞTİ
 df.to_sql(
-    "engineered_customers",
+    "engineered_features",   # ← düzeltildi
     engine,
     if_exists="replace",
     index=False
 )
 
-print(" Data imported successfully!")
+print("Data imported successfully!")

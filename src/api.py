@@ -1,329 +1,709 @@
+# =====================================================
+# IMPORTS
+# =====================================================
+from src.config.settings import DATABASE_TABLES
+TABLE_NAME = DATABASE_TABLES["ENGINEERED"]
 from fastapi import FastAPI, HTTPException
-from datetime import datetime
-import pandas as pd
+import json
+from pathlib import Path
 import numpy as np
 import joblib
-import json
-
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-
-from concurrent.futures import ThreadPoolExecutor
-from threading import Lock
-
+import hashlib
 from typing import List
-
+from datetime import datetime
+from src.explain.lime_explainer import build_explanation
+from src.database import get_db_connection, verify_schema
 from src.schemas import (
     RiskResponse,
-    ExplainResponse,
-    BatchCustomer,
-    BatchRiskResponse
+    RiskComponents,
+    LabelComparison,
+    BatchRequest,
+    BatchRiskResponse,
+    BatchResult
 )
 
-from src.explain.lime_explainer import (
-    explain_instance,
-    initialize_explainer
+
+
+# =====================================================
+# PATHS
+# =====================================================
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+MODEL_METADATA_PATH = BASE_DIR / "models" / "metadata.json"
+MODEL_PATH = BASE_DIR / "models" / "risk_model.pkl"
+MODEL_METRICS_PATH = BASE_DIR / "models" / "model_metrics.json"
+# =====================================================
+# MODEL METADATA
+# =====================================================
+def load_model_metadata():
+    if not MODEL_METADATA_PATH.exists():
+        raise HTTPException(500, "Model metadata file not found")
+
+    with open(MODEL_METADATA_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+MODEL_METADATA = load_model_metadata()
+
+FEATURES = MODEL_METADATA["features"]
+
+MODEL_VERSION = MODEL_METADATA.get(
+    "model_version",
+    f"v_unknown_{MODEL_METADATA.get('model_hash','nohash')[:8]}"
 )
 
-from src.rules import rule_engine
-from src.database import load_customers, get_db_connection
+MODEL_HASH = MODEL_METADATA["model_hash"]
+FEATURE_VERSION = MODEL_METADATA.get("feature_version", "v1")
+DATASET_VERSION = MODEL_METADATA.get("dataset_version", "v1")
 
+# =====================================================
+# LOAD MODEL
+# =====================================================
+def load_model():
+    if not MODEL_PATH.exists():
+        print("⚠ fallback scoring active")
+        return None
+
+    print("✅ ML model loaded")
+    return joblib.load(MODEL_PATH)
+
+MODEL = load_model()
+
+
+
+
+# -----------------------------------------------------
+# EXPLAINABILITY (LIME)
+# -----------------------------------------------------
+
+
+# =====================================================
+# FEATURE HASH
+# =====================================================
+def compute_feature_hash(features: dict):
+    normalized = json.dumps(features, sort_keys=True)
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
+# =====================================================
+# NORMALIZER
+# =====================================================
+def normalize_ml_score(score: float):
+
+    if score is None:
+        return None
+
+    MODEL_MAX_SCORE = 25.0
+    normalized = float(score) / MODEL_MAX_SCORE
+    normalized = max(0.0, min(1.0, normalized))
+
+    return round(normalized, 4)
 
 # =====================================================
 # FASTAPI
 # =====================================================
+
 app = FastAPI(
     title="Explainable AI Behavioral Risk Scoring API",
-    version="2.0.0"
+    description="""
+Production-style Machine Learning API for behavioral financial risk analysis.
+
+This system provides an enterprise-oriented risk scoring service powered by
+Explainable Artificial Intelligence principles.
+
+Core Capabilities:
+• Individual customer risk scoring
+• Batch prediction processing
+• Model version and dataset traceability
+• Prediction audit history tracking
+• Explainability-based decision insights
+• System health monitoring
+
+Architecture Goals:
+• Reproducible ML inference
+• Transparent risk evaluation
+• Audit-ready prediction lifecycle
+• Production-grade API design
+
+Designed as a scalable and explainable machine learning service.
+""",
+    version="3.4.2",
+    contact={
+        "name": "AI Risk Analytics Team"
+    },
+    license_info={
+        "name": "Academic Use License"
+    },
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
-
 # =====================================================
-# MODEL
+# STARTUP CHECK
 # =====================================================
-model = joblib.load("models/risk_model.pkl")
+@app.on_event("startup")
+def startup_check():
 
-MODEL_VERSION = "1.0.0"
-FEATURE_VERSION = "1.0.0"
-
-# =====================================================
-# THREAD POOL
-# =====================================================
-executor = ThreadPoolExecutor(max_workers=4)
-
-# =====================================================
-# GLOBAL DATA
-# =====================================================
-df = None
-
-FEATURES = [
-    "payment_discipline_score",
-    "income_stability_index",
-    "financial_resilience_score"
-]
-
-FEATURE_COUNT = len(FEATURES)
-
-_prediction_buffer = np.zeros((1, FEATURE_COUNT), dtype=np.float32)
-buffer_lock = Lock()
-
-prediction_cache = {}
-cache_lock = Lock()
-
-
-# =====================================================
-# FEATURE BUILDER
-# =====================================================
-def build_features(row, features):
-
-    values = []
-
-    for f in features:
-        v = row.get(f, 0)
-
-        if v is None or (isinstance(v, float) and np.isnan(v)):
-            v = 0
-
-        try:
-            v = float(v)
-        except Exception:
-            v = 0.0
-
-        values.append(v)
-
-    return np.array(values, dtype=np.float32)
-
-
-def cache_key(values):
-    return tuple(round(float(v), 4) for v in values)
-
-
-# =====================================================
-# FAST PREDICT
-# =====================================================
-def fast_predict(values):
-
-    key = cache_key(values)
-
-    cached = prediction_cache.get(key)
-    if cached is not None:
-        return cached
-
-    with buffer_lock:
-        _prediction_buffer[0, :] = values
-        prediction = float(model.predict(_prediction_buffer)[0])
-
-    with cache_lock:
-        prediction_cache[key] = prediction
-
-    return prediction
-
-
-# =====================================================
-# AUDIT LOGGER
-# =====================================================
-def log_prediction(customer_id, values, score, segment, endpoint):
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
+        verify_schema(conn)
+        print("✅ Database schema verified")
+    finally:
+        conn.close()
+
+# =====================================================
+# FEATURE FETCH
+# =====================================================
+def fetch_customer_features(customer_id: int):
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        query = f"""
+            SELECT {",".join(FEATURES)}
+            FROM engineered_features
+            WHERE customer_id = %s
+            LIMIT 1;
+        """
+
+        cur.execute(query, (customer_id,))
+        row = cur.fetchone()
+
+        if not row:
+            raise HTTPException(404, "Customer not found")
+
+        return dict(zip(FEATURES, row))
+
+    finally:
+        conn.close()
+
+# =====================================================
+# ORIGINAL RISK
+# =====================================================
+def fetch_original_risk(customer_id: int):
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT risk_score, risk_band
+            FROM engineered_features
+            WHERE customer_id = %s
+            LIMIT 1
+        """, (customer_id,))
+
+        row = cur.fetchone()
+
+        if not row:
+            return None, None
+
+        raw_score, raw_band = row
+
+        # ⚠️ önemli: senin DB zaten 0-1 arasıysa normalize etme!
+        original_score = float(raw_score)
+
+        BAND_MAP = {
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High"
+        }
+
+        original_band = (
+            BAND_MAP.get(str(raw_band).strip().lower())
+            if raw_band else None
+        )
+
+        return original_score, original_band
+
+    finally:
+        conn.close()
+
+# =====================================================
+# RULE SCORE
+# =====================================================
+def calculate_rule_score(features: dict):
+
+    values = np.array([float(features[f]) for f in FEATURES])
+    normalized = values / 100.0
+    risk_score = 1 - np.mean(normalized)
+
+    return round(max(0.0, min(1.0, float(risk_score))), 3)
+
+
+# =====================================================
+# ML PREDICTION
+# =====================================================
+def predict_with_model(features: dict):
+
+    if MODEL is None:
+        return None
+
+    values = np.array([[
+        float(features.get(f, 0) or 0)
+        for f in FEATURES
+    ]])
+
+    raw_prediction = float(MODEL.predict(values)[0])
+
+    return normalize_ml_score(raw_prediction)
+
+# =====================================================
+# RISK BAND
+# =====================================================
+def calculate_risk_band(score: float):
+
+    if score < 0.33:
+        return "Low", "green", "Low Risk"
+    elif score < 0.66:
+        return "Medium", "yellow", "Moderate Risk"
+    else:
+        return "High", "red", "High Risk"
+
+# =====================================================
+# CACHE CHECK
+# =====================================================
+def fetch_latest_prediction(customer_id: int, feature_hash: str):
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT risk_score,
+                   model_version,
+                   feature_version,
+                   dataset_version,
+                   feature_hash
+            FROM prediction_history
+            WHERE customer_id = %s
+            ORDER BY prediction_time DESC
+            LIMIT 1
+        """, (customer_id,))
+
+        row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        stored_score, mv, fv, dv, fh = row
+
+        if (
+            mv != MODEL_VERSION or
+            fv != FEATURE_VERSION or
+            dv != DATASET_VERSION or
+            fh != feature_hash
+        ):
+            return None
+
+        return float(stored_score)
+
+    finally:
+        conn.close()
+
+# =====================================================
+# SAVE PREDICTION
+# =====================================================
+def save_prediction(
+    customer_id: int,
+    score: float,
+    original_band: str,
+    predicted_band: str,
+    feature_hash: str
+):
+
+    conn = get_db_connection()
+    try:
         cur = conn.cursor()
 
         cur.execute("""
             INSERT INTO prediction_history(
                 customer_id,
                 risk_score,
-                risk_band,
+                original_band,
+                predicted_band,
                 model_version,
                 feature_version,
-                endpoint,
-                features,
-                created_at
+                dataset_version,
+                feature_hash,
+                prediction_time,
+                created_by
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW(),'api_inference')
         """, (
             customer_id,
             float(score),
-            segment,
+            original_band,
+            predicted_band,
             MODEL_VERSION,
             FEATURE_VERSION,
-            endpoint,
-            json.dumps(values),
-            datetime.utcnow()
+            DATASET_VERSION,
+            feature_hash
         ))
 
         conn.commit()
-        cur.close()
+
+    finally:
         conn.close()
 
-    except Exception as e:
-        print("Audit log failed:", e)
-
-
 # =====================================================
-# 🔥 LOAD ENGINEERED FEATURES (CRITICAL FIX)
+# ✅ CORE LOGIC (YENİ — ENDPOINTTEN AYRILDI)
 # =====================================================
-def load_engineered_features():
-
-    conn = get_db_connection()
-
-    query = """
-        SELECT
-            customer_id,
-            payment_discipline_score,
-            income_stability_index,
-            financial_resilience_score
-        FROM engineered_features
-    """
-
-    df = pd.read_sql(query, conn)
-
-    conn.close()
-
-    return df
 
 
-# =====================================================
-# STARTUP
-# =====================================================
-@app.on_event("startup")
-def startup_event():
+def calculate_risk(customer_id: int) -> RiskResponse:
 
-    global df
+    features = fetch_customer_features(customer_id)
+    feature_hash = compute_feature_hash(features)
 
-    print("\nLoading engineered features from DB...")
+    # ✅ DB’den hem score hem band al
+    original_score, original_band = fetch_original_risk(customer_id)
 
-    df = load_engineered_features()
+    if original_score is None:
+        original_score = calculate_rule_score(features)
 
-    if df is None or df.empty:
-        print("⚠️ No engineered features loaded!")
-        return
+    if original_band is None:
+        original_band, _, _ = calculate_risk_band(original_score)
 
-    print(f"✅ Loaded {len(df)} customers")
+    # 🔥 prediction cache kontrol
+    predicted_score = fetch_latest_prediction(
+        customer_id,
+        feature_hash
+    )
 
-    # ✅ LIME NOW USES CORRECT DATA
-    initialize_explainer(df, FEATURES)
+    if predicted_score is None:
 
-    # warmup prediction
-    try:
-        sample = build_features(df.iloc[0], FEATURES)
-        _prediction_buffer[0, :] = sample
-        model.predict(_prediction_buffer)
-    except Exception:
-        pass
+        ml_score = predict_with_model(features)
 
-
-# =====================================================
-# HELPERS
-# =====================================================
-def ensure_data_loaded():
-    if df is None or df.empty:
-        raise HTTPException(
-            status_code=500,
-            detail="Dataset not loaded"
+        predicted_score = (
+            ml_score if ml_score is not None
+            else calculate_rule_score(features)
         )
 
+        predicted_band, _, _ = calculate_risk_band(predicted_score)
 
-def risk_segment(score: float):
-    if score >= 75:
-        return "Low Risk"
-    elif score >= 50:
-        return "Medium Risk"
-    return "High Risk"
+        save_prediction(
+            customer_id,
+            predicted_score,
+            original_band,
+            predicted_band,
+            feature_hash
+        )
 
+    # ✅ final band (response için)
+    band, color, label = calculate_risk_band(predicted_score)
 
-def risk_band_from_score(score: float):
-    if score >= 70:
-        return "Low"
-    elif score >= 40:
-        return "Medium"
-    return "High"
-
-
-def risk_color(label: str):
-    return (
-        "green" if label == "Low Risk"
-        else "orange" if label == "Medium Risk"
-        else "red"
+    # ✅ comparison
+    label_comparison = LabelComparison(
+        original_band=original_band,
+        predicted_band=band,
+        agreement=(original_band.lower() == band.lower())
     )
 
 
+    # -----------------------------------------------------
+    # EXPLAINABILITY (LIME)
+    # -----------------------------------------------------
+    lime_explanation = None
+
+    if MODEL is not None:
+        try:
+            row_features = {
+                f: float(features.get(f, 0) or 0)
+                for f in FEATURES
+            }
+
+            print("LIME INPUT:", row_features)
+
+            lime_explanation = build_explanation(
+                row_features,
+                MODEL
+            )
+
+        except Exception as e:
+            print("⚠ explainability failed:", e)
+
+    # -----------------------------------------------------
+    # COMPONENTS
+    # -----------------------------------------------------
+    components = RiskComponents(
+        payment_discipline_score=float(features["payment_discipline_score"]),
+        income_stability_index=float(features["income_stability_index"]),
+        financial_resilience_score=float(features["financial_resilience_score"]),
+    )
+
+    # -----------------------------------------------------
+    # RESPONSE (TEK RETURN)
+    # -----------------------------------------------------
+    return RiskResponse(
+    customer_id=customer_id,
+    predicted_risk_score=round(predicted_score, 3),
+    original_risk_score=float(original_score),
+
+    risk_band=band,
+    risk_color=color,
+    risk_label=label,
+
+    components=components,
+    label_comparison=label_comparison,
+
+    lime_explanation=lime_explanation,
+
+    # ✅ BURAYA EKLE
+    score_metadata={
+        "original_scale": "0-1 (historical dataset)",
+        "predicted_scale": "0-1 (normalized ML output)"
+    }
+)
+#===================================
+# MAIN ENDPOINT (DEĞİŞMEDİ — SADECE FONKSİYON ÇAĞIRIYOR)
 # =====================================================
-# SINGLE SCORE
+@app.get(
+    "/risk-score/{customer_id}",
+    response_model=RiskResponse,
+    tags=["Scoring"],
+    summary="Calculate behavioral risk score",
+    description="Returns explainable ML-based financial risk score for a single customer."
+)
+def risk_score(customer_id: int):
+    return calculate_risk(customer_id)
+
+
+
 # =====================================================
-@app.get("/risk-score/{customer_id}", response_model=RiskResponse)
-def get_risk_score(customer_id: int):
+# ✅ BATCH SCORING (YENİ ENDPOINT)
+# =====================================================
 
-    ensure_data_loaded()
+@app.post(
+    "/risk-score/batch",
+    response_model=BatchRiskResponse,
+    tags=["Scoring"],
+    summary="Batch risk scoring",
+    description="Calculates risk scores for multiple customers in a single request."
+)
+def batch_risk_score(request: BatchRequest):
 
-    customer = df[df["customer_id"] == customer_id]
+    results = []
 
-    if customer.empty:
-        raise HTTPException(404, "Customer not found")
+    for customer_id in request.customer_ids:
+        try:
+            r = calculate_risk(customer_id)
 
-    row = customer.iloc[0]
+            results.append(
+    BatchResult(
+        customer_id=r.customer_id,
+        risk_score=round(r.predicted_risk_score, 3),
+        risk_segment=r.risk_band,
+        risk_label=r.risk_label,
+        risk_color=r.risk_color
+    )
+)
 
-    values = build_features(row, FEATURES)
+        # ✅ Partial failure handling (API bozulmaz)
+        except Exception as e:
+            results.append(
+                BatchResult(
+                    customer_id=customer_id,
+                    error=str(e)
+                )
+            )
 
-    score = fast_predict(values)
-    segment = risk_segment(score)
-    band = risk_band_from_score(score)
+    return BatchRiskResponse(
+        results=results,
+        total_processed=len(results)
+    )
+# =====================================================
+# HEALTH
+# =====================================================
 
-    log_prediction(customer_id, values.tolist(), score, segment, "risk-score")
-
+@app.get(
+    "/health",
+    tags=["System"],
+    summary="API health check",
+    description="Checks API status and model availability."
+)
+def health():
     return {
-        "customer_id": customer_id,
-        "original_risk_score": round(score, 2),
-        "predicted_risk_score": round(score, 2),
-        "risk_label": segment,
-        "risk_color": risk_color(segment),
-        "risk_band": band,
-        "components": {
-            FEATURES[i]: float(values[i])
-            for i in range(len(FEATURES))
-        },
-        "timestamp": datetime.utcnow()
+        "status": "ok",
+        "model_loaded": MODEL is not None,
+        "model_version": MODEL_VERSION
+    }
+
+# =====================================================
+# MODEL INFO
+# =====================================================
+@app.get("/model-info", tags=["Model"])
+def model_info():
+    return {
+        "model_version": MODEL_VERSION,
+        "model_hash": MODEL_HASH,
+        "feature_version": FEATURE_VERSION,
+        "dataset_version": DATASET_VERSION,
+        "features": FEATURES
     }
 
 
+
 # =====================================================
-# EXPLAIN
+# HISTORY
 # =====================================================
-@app.get("/explain/{customer_id}", response_model=ExplainResponse)
-def explain_customer(customer_id: int):
+@app.get(
+    "/history/{customer_id}",
+    tags=["Audit"],
+    summary="Prediction audit history",
+    description="Returns historical predictions for auditability and model traceability."
+)
+def get_prediction_history(customer_id: int):
 
-    ensure_data_loaded()
+    conn = get_db_connection()
 
-    customer = df[df["customer_id"] == customer_id]
+    try:
+        cur = conn.cursor()
 
-    if customer.empty:
-        raise HTTPException(404, "Customer not found")
+        cur.execute("""
+            SELECT
+                customer_id,
+                risk_score,
+                original_band,
+                predicted_band,
+                model_version,
+                feature_version,
+                dataset_version,
+                prediction_time,
+                created_by
+            FROM prediction_history
+            WHERE customer_id = %s
+            ORDER BY prediction_time DESC
+            LIMIT 50
+        """, (customer_id,))
 
-    row = customer.iloc[0]
+        rows = cur.fetchall()
 
-    values = build_features(row, FEATURES)
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail="No prediction history found"
+            )
 
-    score = fast_predict(values)
-    segment = risk_segment(score)
+        history = []
 
-    lime_exp = explain_instance(row[FEATURES], model)
+        for r in rows:
+            history.append({
+                "customer_id": r[0],
+                "predicted_risk_score": float(r[1]),
+                "original_band": r[2],
+                "predicted_band": r[3],
+                "model_version": r[4],
+                "feature_version": r[5],
+                "dataset_version": r[6],
+                "prediction_time": r[7],
+                "created_by": r[8]
+            })
 
-    contributions = [
-        {
-            "feature": str(item["feature"]),
-            "impact": float(item["impact"])
+        return {
+            "customer_id": customer_id,
+            "total_records": len(history),
+            "history": history
         }
-        for item in lime_exp
-    ]
 
-    explanation_text = ", ".join(rule_engine(row))
+    finally:
+        conn.close()
 
-    log_prediction(customer_id, values.tolist(), score, segment, "explain")
 
-    return {
-        "customer_id": customer_id,
-        "risk_score": round(score, 2),
-        "risk_segment": segment,
-        "risk_label": segment,
-        "risk_color": risk_color(segment),
-        "feature_contributions": contributions,
-        "top_risk_factors": contributions[:3],
-        "natural_language_explanation": explanation_text
-    }
+
+# =====================================================
+# MODEL METRICS
+# =====================================================
+@app.get(
+    "/model-metrics",
+    tags=["Model"],
+    summary="Model performance metrics",
+    description="Returns evaluation metrics collected during model training."
+)
+def get_model_metrics():
+
+    try:
+        if not MODEL_METRICS_PATH.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Model metrics file not found"
+            )
+
+        with open(MODEL_METRICS_PATH, "r", encoding="utf-8") as f:
+            metrics = json.load(f)
+
+        return {
+            "model_version": MODEL_VERSION,
+            "model_hash": MODEL_HASH,
+            "metrics": metrics
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load metrics: {str(e)}"
+        )
+    
+
+from psycopg2.extras import RealDictCursor
+
+
+# =====================================================
+# EXPLAINABILITY
+# =====================================================
+
+
+@app.get(
+    "/explain/{customer_id}",
+    tags=["Explainability"],
+    summary="Explain prediction factors",
+    description="Provides rule-based explanation of factors influencing risk prediction."
+)
+def explain_prediction(customer_id: int):
+
+    conn = get_db_connection()
+
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute("""
+            SELECT *
+            FROM synthetic_customers
+            WHERE customer_id = %s
+        """, (customer_id,))
+
+        row = cur.fetchone()
+
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail="Customer not found"
+            )
+
+        positives = []
+        negatives = []
+
+        if row["spending_ratio"] > 0.8:
+            positives.append("high_spending_ratio")
+
+        if row["bill_payment_delay_avg"] > 3:
+            positives.append("payment_delay")
+
+        if row["savings_rate"] > 0.2:
+            negatives.append("high_savings_rate")
+
+        if row["employment_duration_months"] > 60:
+            negatives.append("long_employment_duration")
+
+        return {
+            "customer_id": customer_id,
+            "prediction": row["risk_band"],
+            "top_positive_factors": positives,
+            "top_negative_factors": negatives,
+            "explanation_summary":
+                "Risk mainly influenced by behavioral financial patterns."
+        }
+
+    finally:
+        conn.close()

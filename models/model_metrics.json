@@ -1,0 +1,14 @@
+{
+    "model_type": "XGBRegressor",
+    "problem_type": "regression",
+    "metric": "MAE",
+    "mae": 5.68133840104565,
+    "training_samples": 960,
+    "validation_samples": 240,
+    "feature_count": 3,
+    "features": [
+        "payment_discipline_score",
+        "income_stability_index",
+        "financial_resilience_score"
+    ]
+}

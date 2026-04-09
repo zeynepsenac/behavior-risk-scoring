@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 # =====================================================
 # IMPORTS
 # =====================================================
+import pandas as pd
+
 from src.explain.lime_explainer import explain_instance
 from src.rules import rule_engine
 
@@ -120,7 +122,7 @@ def format_lime_output(
 
 
 # =====================================================
-# EXPLANATION CONFIDENCE SCORE (NEW)
+# EXPLANATION CONFIDENCE SCORE
 # =====================================================
 def calculate_explanation_confidence(
     rule_factors: List[Tuple[str, float]],
@@ -157,9 +159,17 @@ def build_explanation(
     """
 
     # -----------------------------------
+    # SAFE ROW CONVERSION (API / DB SAFE)
+    # -----------------------------------
+    if not isinstance(row, dict):
+        row = dict(row)
+
+    row_series = pd.Series(row)
+
+    # -----------------------------------
     # Feature Contributions
     # -----------------------------------
-    contributions = calculate_feature_contributions(row)
+    contributions = calculate_feature_contributions(row_series)
 
     # -----------------------------------
     # Rank Factors
@@ -174,8 +184,10 @@ def build_explanation(
     # -----------------------------------
     # LIME Explanation
     # -----------------------------------
+    feature_vector = row_series[FEATURES]
+
     lime_raw = explain_instance(
-        row[FEATURES],
+        feature_vector,
         model
     )
 
@@ -184,10 +196,10 @@ def build_explanation(
     # -----------------------------------
     # Rule Engine Explanation
     # -----------------------------------
-    rules = rule_engine(row)
+    rules = rule_engine(row_series)
 
     # -----------------------------------
-    # Explanation Confidence (NEW)
+    # Explanation Confidence
     # -----------------------------------
     confidence_score = calculate_explanation_confidence(
         ranked,
@@ -195,13 +207,15 @@ def build_explanation(
     )
 
     # -----------------------------------
-    # FINAL RESPONSE
+    # FINAL RESPONSE (API STANDARDIZED)
     # -----------------------------------
     return {
         "feature_contributions": contributions,
         "top_risk_factors": ranked,
-        "natural_language_explanation": explanation_text,
+        "natural_language": explanation_text,
         "lime_explanation": lime_explanation,
         "rule_based_explanations": rules,
-        "explanation_confidence": confidence_score
+        "confidence_score": confidence_score,
+        "explanation_method":
+            "Hybrid (Rule Engine + LIME + Feature Attribution)"
     }

@@ -1,0 +1,26 @@
+# Query: risk_level
+# ContextLines: 1
+
+7 results - 2 files
+
+database\migrations\015_audit_enum_and_index.sql:
+  28      IF NOT EXISTS (
+  29:         SELECT 1 FROM pg_type WHERE typname = 'risk_level'
+  30      ) THEN
+  31:         CREATE TYPE risk_level AS ENUM ('Low', 'Medium', 'High');
+  32      END IF;
+
+  36  ALTER TABLE engineered_features
+  37: ADD COLUMN IF NOT EXISTS risk_band_new risk_level;
+  38  
+
+  42     -- CASE risk_band
+  43:      --   WHEN 'Low' THEN 'Low'::risk_level
+  44:        -- WHEN 'Medium' THEN 'Medium'::risk_level
+  45:         --WHEN 'High' THEN 'High'::risk_level
+  46      --END;
+
+docker\initdb\04_load_csv_data.sql:
+  125      END,
+  126:     NULL::risk_level
+  127  FROM staging_engineered_features

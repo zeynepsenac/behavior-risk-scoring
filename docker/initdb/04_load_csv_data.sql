@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS staging_engineered_features;
 DROP TABLE IF EXISTS staging_synthetic_customers;
 
 -- ===============================
--- STAGING TABLES (CSV uyum katmanı)
+-- STAGING TABLES
 -- ===============================
 
 CREATE TABLE IF NOT EXISTS staging_synthetic_customers (
@@ -45,10 +45,7 @@ FROM '/data/synthetic_customers.csv'
 DELIMITER ','
 CSV HEADER;
 
--- ==================================================
--- PARENT TABLE (FK FIX)
--- ==================================================
-
+-- FK parent safety
 INSERT INTO customers(customer_id)
 SELECT DISTINCT customer_id
 FROM staging_synthetic_customers
@@ -99,10 +96,7 @@ FROM '/data/engineered_customers.csv'
 DELIMITER ','
 CSV HEADER;
 
--- ==================================================
--- engineered_features FK güvenliği
--- ==================================================
-
+-- FK safety
 INSERT INTO customers(customer_id)
 SELECT DISTINCT customer_id
 FROM staging_engineered_features
@@ -110,7 +104,6 @@ ON CONFLICT DO NOTHING;
 
 -- ===============================
 -- STAGING → engineered_features
--- ✅ PRODUCTION UPSERT FIX
 -- ===============================
 
 INSERT INTO engineered_features(
@@ -119,18 +112,18 @@ INSERT INTO engineered_features(
     income_stability_index,
     financial_resilience_score,
     risk_score,
-    risk_band,
-    updated_at
+    risk_band
 )
 SELECT
     customer_id,
     payment_discipline_score,
     income_stability_index,
     financial_resilience_score,
-    risk_score,
-    risk_band::risk_level,
-    NOW()
-
+    CASE
+        WHEN risk_score > 1 THEN risk_score / 100.0
+        ELSE risk_score
+    END,
+    NULL::risk_level
 FROM staging_engineered_features
 WHERE risk_band IN ('Low','Medium','High')
 
@@ -140,11 +133,30 @@ DO UPDATE SET
     income_stability_index = EXCLUDED.income_stability_index,
     financial_resilience_score = EXCLUDED.financial_resilience_score,
     risk_score = EXCLUDED.risk_score,
-    risk_band = EXCLUDED.risk_band,
-    updated_at = NOW();
+    risk_band = EXCLUDED.risk_band;
 
 -- ===============================
--- CLEAN STAGING (pipeline hygiene)
+-- OPTIONAL updated_at SAFE UPDATE
+-- (only if column exists)
+-- ===============================
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='engineered_features'
+        AND column_name='updated_at'
+    ) THEN
+        EXECUTE '
+            UPDATE engineered_features
+            SET updated_at = NOW()
+        ';
+    END IF;
+END $$;
+
+-- ===============================
+-- CLEAN STAGING
 -- ===============================
 
 TRUNCATE staging_synthetic_customers;

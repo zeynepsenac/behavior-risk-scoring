@@ -37,13 +37,13 @@ ALTER TABLE engineered_features
 ADD COLUMN IF NOT EXISTS risk_band_new risk_level;
 
 
-UPDATE engineered_features
-SET risk_band_new =
-    CASE risk_band
-        WHEN 'Low' THEN 'Low'::risk_level
-        WHEN 'Medium' THEN 'Medium'::risk_level
-        WHEN 'High' THEN 'High'::risk_level
-    END;
+--UPDATE engineered_features
+--SET risk_band_new =
+  --  CASE risk_band
+    --    WHEN 'Low' THEN 'Low'::risk_level
+      --  WHEN 'Medium' THEN 'Medium'::risk_level
+        --WHEN 'High' THEN 'High'::risk_level
+    --END;
 
 
 ALTER TABLE engineered_features

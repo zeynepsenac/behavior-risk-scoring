@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION log_prediction()
+CREATE OR REPLACE FUNCTION log_prediction() 
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $func$
@@ -27,12 +27,14 @@ BEGIN
         active_model := 'unknown_model';
     END IF;
 
-    -- DELETE
+
+    -- ============================
+    -- DELETE AUDIT
+    -- ============================
     IF TG_OP = 'DELETE' THEN
         INSERT INTO prediction_history (
             customer_id,
             risk_score,
-            risk_band,
             model_version,
             feature_version,
             dataset_version,
@@ -41,7 +43,6 @@ BEGIN
         VALUES (
             OLD.customer_id,
             OLD.risk_score,
-            OLD.risk_band,
             active_model,
             OLD.feature_version,
             active_dataset,
@@ -51,21 +52,25 @@ BEGIN
         RETURN OLD;
     END IF;
 
-    -- UPDATE değişiklik kontrolü
+
+    -- ============================
+    -- UPDATE CHANGE CHECK
+    -- ============================
     IF TG_OP = 'UPDATE' THEN
         IF NEW.risk_score IS NOT DISTINCT FROM OLD.risk_score
-           AND NEW.risk_band IS NOT DISTINCT FROM OLD.risk_band
            AND NEW.feature_version IS NOT DISTINCT FROM OLD.feature_version
         THEN
             RETURN NEW;
         END IF;
     END IF;
 
-    -- INSERT & UPDATE log
+
+    -- ============================
+    -- INSERT & UPDATE AUDIT LOG
+    -- ============================
     INSERT INTO prediction_history (
         customer_id,
         risk_score,
-        risk_band,
         model_version,
         feature_version,
         dataset_version
@@ -73,7 +78,6 @@ BEGIN
     VALUES (
         NEW.customer_id,
         NEW.risk_score,
-        NEW.risk_band,
         active_model,
         NEW.feature_version,
         active_dataset

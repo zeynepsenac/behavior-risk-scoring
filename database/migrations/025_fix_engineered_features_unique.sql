@@ -1,0 +1,3 @@
+ALTER TABLE engineered_features
+ADD CONSTRAINT engineered_features_customer_unique
+UNIQUE (customer_id);
