@@ -122,6 +122,26 @@ def format_lime_output(
 
 
 # =====================================================
+# 🔥 NEW: RULE SCORECARD (EKLENDİ)
+# =====================================================
+def calculate_rule_scorecard(rules: List[Dict]) -> float:
+    """
+    Aggregates rule impacts into a single score.
+    Positive = risk increase
+    Negative = risk decrease
+    """
+    score = 0.0
+
+    for r in rules:
+        try:
+            score += float(r.get("impact", 0))
+        except Exception:
+            continue
+
+    return round(score, 3)
+
+
+# =====================================================
 # EXPLANATION CONFIDENCE SCORE
 # =====================================================
 def calculate_explanation_confidence(
@@ -199,6 +219,11 @@ def build_explanation(
     rules = rule_engine(row_series)
 
     # -----------------------------------
+    # 🔥 NEW: RULE SCORECARD HESAPLA
+    # -----------------------------------
+    rule_score = calculate_rule_scorecard(rules)
+
+    # -----------------------------------
     # Explanation Confidence
     # -----------------------------------
     confidence_score = calculate_explanation_confidence(
@@ -207,15 +232,20 @@ def build_explanation(
     )
 
     # -----------------------------------
-    # FINAL RESPONSE (API STANDARDIZED)
+    # FINAL RESPONSE (GENİŞLETİLDİ)
     # -----------------------------------
     return {
         "feature_contributions": contributions,
         "top_risk_factors": ranked,
         "natural_language": explanation_text,
+
         "lime_explanation": lime_explanation,
+
         "rule_based_explanations": rules,
+        "rule_based_score": rule_score,   # ✅ YENİ
+
         "confidence_score": confidence_score,
+
         "explanation_method":
             "Hybrid (Rule Engine + LIME + Feature Attribution)"
     }

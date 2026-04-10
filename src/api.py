@@ -21,9 +21,13 @@ from src.schemas import (
     BatchRiskResponse,
     BatchResult
 )
+from src.schemas import SimpleRiskResponse
+from src.rules import rule_engine
+from src.explain_pipeline import calculate_rule_scorecard
 
 
-
+from src.explain.lime_explainer import initialize_explainer
+from src.database import load_customers
 # =====================================================
 # PATHS
 # =====================================================
@@ -147,7 +151,17 @@ def startup_check():
         print("✅ Database schema verified")
     finally:
         conn.close()
-
+    # ==========================================
+    # LIME INITIALIZATION (CRITICAL FIX)
+    # ==========================================
+    try:
+        df = load_customers()
+        initialize_explainer(
+            df,
+            FEATURES
+        )
+    except Exception as e:
+        print("⚠️ LIME init failed:", e)
 # =====================================================
 # FEATURE FETCH
 # =====================================================
@@ -217,16 +231,7 @@ def fetch_original_risk(customer_id: int):
     finally:
         conn.close()
 
-# =====================================================
-# RULE SCORE
-# =====================================================
-def calculate_rule_score(features: dict):
 
-    values = np.array([float(features[f]) for f in FEATURES])
-    normalized = values / 100.0
-    risk_score = 1 - np.mean(normalized)
-
-    return round(max(0.0, min(1.0, float(risk_score))), 3)
 
 
 # =====================================================
@@ -354,11 +359,19 @@ def calculate_risk(customer_id: int) -> RiskResponse:
     features = fetch_customer_features(customer_id)
     feature_hash = compute_feature_hash(features)
 
-    # ✅ DB’den hem score hem band al
-    original_score, original_band = fetch_original_risk(customer_id)
+    rule_result = rule_engine(features)
+
+    rules = rule_result["detailed_rules"]   # ✅ LIST
+    rule_score = rule_result["score"]       # ✅ FLOAT
+
+    #  DB’den hem score hem band al
+    original_score, _ = fetch_original_risk(customer_id)
+
+    # BAND'I YENİDEN HESAPLA
+    original_band, _, _ = calculate_risk_band(original_score)
 
     if original_score is None:
-        original_score = calculate_rule_score(features)
+        original_score = rule_score
 
     if original_band is None:
         original_band, _, _ = calculate_risk_band(original_score)
@@ -374,10 +387,9 @@ def calculate_risk(customer_id: int) -> RiskResponse:
         ml_score = predict_with_model(features)
 
         predicted_score = (
-            ml_score if ml_score is not None
-            else calculate_rule_score(features)
-        )
-
+         ml_score if ml_score is not None
+         else rule_score
+)
         predicted_band, _, _ = calculate_risk_band(predicted_score)
 
         save_prediction(
@@ -447,6 +459,9 @@ def calculate_risk(customer_id: int) -> RiskResponse:
 
     lime_explanation=lime_explanation,
 
+    rule_based_score=rule_score,
+    rule_explanations=rules,
+
     # ✅ BURAYA EKLE
     score_metadata={
         "original_scale": "0-1 (historical dataset)",
@@ -467,6 +482,17 @@ def risk_score(customer_id: int):
     return calculate_risk(customer_id)
 
 
+@app.get("/risk-score-simple/{customer_id}", response_model=SimpleRiskResponse)
+def simple_risk(customer_id: int):
+
+    result = calculate_risk(customer_id)
+
+    return SimpleRiskResponse(
+        risk_score=result.predicted_risk_score,
+        risk_band=result.risk_band,
+        risk_label=result.risk_label,
+        confidence="Model-based prediction"
+    )
 
 # =====================================================
 # ✅ BATCH SCORING (YENİ ENDPOINT)
@@ -475,6 +501,7 @@ def risk_score(customer_id: int):
 @app.post(
     "/risk-score/batch",
     response_model=BatchRiskResponse,
+    response_model_exclude_none=True,
     tags=["Scoring"],
     summary="Batch risk scoring",
     description="Calculates risk scores for multiple customers in a single request."

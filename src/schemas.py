@@ -32,6 +32,15 @@ class FeatureContribution(BaseModel):
 
 
 # =====================================================
+# ✅ RULE-BASED EXPLAINABILITY MODEL
+# =====================================================
+
+class RuleItem(BaseModel):
+    rule: str
+    impact: float
+
+
+# =====================================================
 # MAIN RISK RESPONSE (✅ EXTENDED — BACKWARD SAFE)
 # =====================================================
 
@@ -42,18 +51,34 @@ class RiskResponse(BaseModel):
     risk_band: str
     risk_color: str
     risk_label: str
+
     components: RiskComponents
     label_comparison: LabelComparison
 
-    # ✅ EXISTING (bozulmadı)
+    # ✅ EXISTING
     lime_explanation: Optional[List[Dict]] = None
 
-    # ✅ YENİ EKLENEN (scale açıklaması)
+    # ✅ RULE ENGINE (FIXED STRUCTURE)
+    rule_based_score: Optional[float] = None
+    rule_explanations: Optional[List[RuleItem]] = None
+
+    # ✅ EXISTING
     score_metadata: Optional[Dict[str, str]] = None
 
 
 # =====================================================
-# EXPLAIN RESPONSE (OPTIONAL SEPARATE ENDPOINT MODEL)
+# 🆕 SIMPLE RESPONSE (YENİ EKLENDİ)
+# =====================================================
+
+class SimpleRiskResponse(BaseModel):
+    risk_score: float
+    risk_band: str
+    risk_label: str
+    confidence: str
+
+
+# =====================================================
+# EXPLAIN RESPONSE
 # =====================================================
 
 class ExplainResponse(BaseModel):
@@ -64,18 +89,14 @@ class ExplainResponse(BaseModel):
     risk_color: str
     risk_label: str
 
-    # tüm feature etkileri
     feature_contributions: List[FeatureContribution]
-
-    # en önemli risk faktörleri
     top_risk_factors: List[FeatureContribution]
 
-    # insan okunabilir açıklama
     natural_language_explanation: str
 
 
 # =====================================================
-# ✅ BATCH SCORING INPUT
+# BATCH INPUT
 # =====================================================
 
 class BatchRequest(BaseModel):
@@ -83,15 +104,19 @@ class BatchRequest(BaseModel):
 
 
 # =====================================================
-# SINGLE BATCH RESULT
+# ✅ FIXED BATCH RESULT (CRASH ÖNLER)
 # =====================================================
 
 class BatchResult(BaseModel):
     customer_id: int
-    risk_score: float
-    risk_segment: str
-    risk_label: str
-    risk_color: str
+
+    risk_score: Optional[float] = None
+    risk_segment: Optional[str] = None
+    risk_label: Optional[str] = None
+    risk_color: Optional[str] = None
+
+    # ✅ ERROR HANDLING EKLENDİ
+    error: Optional[str] = None
 
 
 # =====================================================
