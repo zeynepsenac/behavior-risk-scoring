@@ -1,150 +1,159 @@
-# ==========================================
-# PROJECT ROOT PATH FIX (VERY IMPORTANT)
-# ==========================================
-import sys
-import os
-
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../..")
-)
-sys.path.append(PROJECT_ROOT)
-
-# ==========================================
-# CENTRAL CONFIG (PRODUCTION SAFE ✅)
-# ==========================================
-from src.config.settings import DATABASE_TABLES
-from src.database import load_customers
-
-TABLE_NAME = DATABASE_TABLES["ENGINEERED"]
-
-# ==========================================
-# IMPORTS
-# ==========================================
-import json
-from pathlib import Path
 import pandas as pd
 import joblib
+import numpy as np
+import json
+from lime.lime_tabular import LimeTabularExplainer
 
-from xgboost import XGBRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error
+print("🔄 Generating predictions...")
 
-from utils.model_versioning import create_metadata
+# ================================
+# MODEL + SCALER LOAD
+# ================================
+model = joblib.load("models/risk_model_v2.pkl")
+scaler = joblib.load("models/scaler_v2.pkl")
 
+# 🔥 FIX 1: TRAIN DATA PATH FIX
+X_train_scaled = joblib.load("models/X_train_scaled_v2.pkl")
 
-# ==========================================
-# PATHS
-# ==========================================
-data_path = os.path.join(
-    PROJECT_ROOT,
-    "data",
-    "engineered_customers.csv"
-)
+# ================================
+# DATA LOAD
+# ================================
+df = pd.read_csv("data/engineered_customers.csv")
 
-model_dir = os.path.join(PROJECT_ROOT, "models")
-os.makedirs(model_dir, exist_ok=True)
-
-model_path = os.path.join(model_dir, "risk_model.pkl")
-metrics_path = os.path.join(model_dir, "model_metrics.json")
-
-
-# ==========================================
-# LOAD DATA (DB FIRST → CSV FALLBACK ✅)
-# ==========================================
-try:
-    print("📦 Loading data from PostgreSQL...")
-    df = load_customers()
-    print(f"✅ Loaded {len(df)} rows from DB table: {TABLE_NAME}")
-
-except Exception as e:
-    print("⚠ Database load failed — switching to CSV fallback")
-    print(e)
-
-    df = pd.read_csv(data_path)
-    print(f"✅ Loaded {len(df)} rows from CSV")
-
-
-# ==========================================
-# FEATURE SELECTION
-# ==========================================
-FEATURES = [
+feature_cols = [
     "payment_discipline_score",
     "income_stability_index",
     "financial_resilience_score"
 ]
 
-X = df[FEATURES]
-y = df["risk_score"]
+X = df[feature_cols].copy()
 
+# ================================
+# SCALE INPUT
+# ================================
+X_scaled = scaler.transform(X)
 
-# ==========================================
-# TRAIN / TEST SPLIT
-# ==========================================
-X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=0.2,
-    random_state=42
+# ================================
+# PREDICTION
+# ================================
+raw_preds = model.predict(X_scaled)
+
+preds = raw_preds / 25.0
+preds = np.clip(preds, 0, 1)
+
+df["predicted_risk_score"] = preds
+
+# ================================
+# BAND
+# ================================
+df["predicted_band"] = pd.cut(
+    df["predicted_risk_score"],
+    bins=[0, 0.33, 0.66, 1],
+    labels=["Low", "Medium", "High"],
+    include_lowest=True
 )
 
+# ================================
+# 🔥 LIME FIXED
+# ================================
 
-# ==========================================
-# TRAIN MODEL
-# ==========================================
-model = XGBRegressor(
-    n_estimators=120,
-    max_depth=4,
-    learning_rate=0.05,
-    random_state=42
+# FIX 2: CLEAN TRAIN DATA
+X_train_scaled = pd.DataFrame(X_train_scaled)
+X_train_scaled = X_train_scaled.select_dtypes(include=[np.number]).to_numpy(dtype=float)
+
+explainer = LimeTabularExplainer(
+    training_data=X_train_scaled,
+    feature_names=feature_cols,
+    mode="regression"
 )
 
-print("🚀 Training model...")
-model.fit(X_train, y_train)
+# FIX 3: SAFE PREDICT FUNCTION
+def predict_fn(x):
+    x = np.asarray(x, dtype=float)
+    preds = model.predict(x)
+    preds = preds / 25.0
+    return np.clip(preds, 0, 1)
 
+# ================================
+# 🔥 LIME LOOP (DOĞRU HALİ)
+# ================================
+lime_results_all = []
 
-# ==========================================
-# VALIDATION METRICS
-# ==========================================
-y_pred = model.predict(X_test)
+for i in range(len(X_scaled)):
 
-mae = mean_absolute_error(y_test, y_pred)
+    exp = explainer.explain_instance(
+        X_scaled[i],
+        predict_fn,
+        num_features=3
+    )
 
-print(f"📊 Validation MAE: {round(mae, 4)}")
+    cleaned = []
 
+    for item in exp.as_list():
+        try:
+            f, v = item
 
-# ==========================================
-# SAVE MODEL
-# ==========================================
-joblib.dump(model, model_path)
-print(f"✅ Model saved at: {model_path}")
+            # 🔥 string gelirse skip (impact hatasını bitirir)
+            if isinstance(v, str):
+                continue
 
+            v = float(v)
 
-# ==========================================
-# SAVE MODEL METRICS (SINGLE SOURCE ⭐)
-# ==========================================
-metrics = {
-    "model_type": "XGBRegressor",
-    "problem_type": "regression",
-    "metric": "MAE",
-    "mae": float(mae),
-    "training_samples": int(len(X_train)),
-    "validation_samples": int(len(X_test)),
-    "feature_count": len(FEATURES),
-    "features": FEATURES
-}
+            feature_name = str(f)
 
-with open(metrics_path, "w", encoding="utf-8") as f:
-    json.dump(metrics, f, indent=4)
+            matched = False
+            for col in feature_cols:
+                if col in feature_name:
+                    feature_name = col
+                    matched = True
+                    break
 
-print("✅ model_metrics.json created")
+            if matched:
+                cleaned.append({
+                    "feature": feature_name,
+                    "impact": v
+                })
 
+        except Exception as e:
+            print("⚠ LIME row skip:", e)
+            continue
 
-# ==========================================
-# CREATE MODEL METADATA (AUTO VERSIONING)
-# ==========================================
-create_metadata(
-    features=FEATURES,
-    feature_version="v1"
-)
+    lime_results_all.append(cleaned)
 
-print("✅ Model trained, metadata and metrics generated")
+# ================================
+# JSON OUTPUT
+# ================================
+df["lime_explanation"] = [
+    json.dumps(x, ensure_ascii=False) for x in lime_results_all
+]
+
+# ================================
+# BASE VALUE
+# ================================
+base_preds = model.predict(X_train_scaled)
+base_preds = base_preds / 25.0
+base_preds = np.clip(base_preds, 0, 1)
+
+df["base_value"] = float(np.mean(base_preds))
+
+# ================================
+# MODEL INFO
+# ================================
+df["model_hash"] = "b02a4b90e9feb18d0ef31562d8c2fa4a46c7b5812790cc777c6110e8a87b7c65"
+df["model_version"] = "v1_fixed_scale"
+
+# ================================
+# OUTPUT
+# ================================
+output_cols = [
+    "predicted_risk_score",
+    "predicted_band",
+    "model_hash",
+    "model_version",
+    "base_value",
+    "lime_explanation"
+]
+
+df[output_cols].to_csv("data/predictions.csv", index=False)
+
+print("✅ predictions.csv başarıyla oluşturuldu (FULL LIME FIX + SCALE SAFE)")

@@ -1,0 +1,109 @@
+{
+  "financial_resilience": [
+    {
+      "min": 0,
+      "max": 30,
+      "label": "Yüksek Risk",
+      "color": "#dc2626",
+      "description": "Finansal dayanıklılık düşüktür.",
+      "rule": "Eğer finansal dayanıklılık skoru 30'un altındaysa → yüksek risk",
+      "action": "Acil durum fonu oluşturulmalı",
+      "priority": "Yüksek",
+      "impact": 0.08
+    },
+    {
+      "min": 30,
+      "max": 70,
+      "label": "Orta Risk",
+      "color": "#f59e0b",
+      "description": "Finansal dayanıklılık orta seviyededir.",
+      "rule": "Eğer finansal dayanıklılık skoru 30 ile 70 arasındaysa → orta risk",
+      "action": "Tasarruf oranı artırılmalı",
+      "priority": "Orta",
+      "impact": 0.04
+    },
+    {
+      "min": 70,
+      "max": 101,
+      "label": "Düşük Risk",
+      "color": "#16a34a",
+      "description": "Finansal dayanıklılık güçlüdür.",
+      "rule": "Eğer finansal dayanıklılık skoru 70 ve üzerindeyse → düşük risk",
+      "action": null,
+      "priority": null,
+      "impact": 0
+    }
+  ],
+
+  "payment_discipline": [
+    {
+      "min": 0,
+      "max": 50,
+      "label": "Zayıf",
+      "color": "#dc2626",
+      "description": "Ödeme disiplini zayıftır.",
+      "rule": "Eğer ödeme disiplini skoru 50'nin altındaysa → zayıf",
+      "action": "Borç ödeme planı oluşturulmalı",
+      "priority": "Yüksek",
+      "impact": 0.08
+    },
+    {
+      "min": 50,
+      "max": 80,
+      "label": "Orta",
+      "color": "#f59e0b",
+      "description": "Ödeme disiplini geliştirilebilir.",
+      "rule": "Eğer ödeme disiplini skoru 50 ile 80 arasındaysa → orta",
+      "action": "Ödemeler düzenli hale getirilmeli",
+      "priority": "Orta",
+      "impact": 0.04
+    },
+    {
+      "min": 80,
+      "max": 101,
+      "label": "İyi",
+      "color": "#16a34a",
+      "description": "Ödeme disiplini güçlüdür.",
+      "rule": "Eğer ödeme disiplini skoru 80 ve üzerindeyse → iyi",
+      "action": null,
+      "priority": null,
+      "impact": 0
+    }
+  ],
+
+  "income_stability": [
+    {
+      "min": 0,
+      "max": 40,
+      "label": "Dengesiz",
+      "color": "#dc2626",
+      "description": "Gelir istikrarsızdır.",
+      "rule": "Eğer gelir istikrarı 40'ın altındaysa → dengesiz",
+      "action": "Ek gelir kaynakları araştırılmalı",
+      "priority": "Yüksek",
+      "impact": 0.08
+    },
+    {
+      "min": 40,
+      "max": 75,
+      "label": "Orta",
+      "color": "#f59e0b",
+      "description": "Gelir dalgalıdır.",
+      "rule": "Eğer gelir istikrarı 40 ile 75 arasındaysa → orta",
+      "action": "Gelir çeşitlendirme stratejisi uygulanmalı",
+      "priority": "Orta",
+      "impact": 0.04
+    },
+    {
+      "min": 75,
+      "max": 101,
+      "label": "Stabil",
+      "color": "#16a34a",
+      "description": "Gelir istikrarı yüksektir.",
+      "rule": "Eğer gelir istikrarı 75 ve üzerindeyse → stabil",
+      "action": null,
+      "priority": null,
+      "impact": 0
+    }
+  ]
+}

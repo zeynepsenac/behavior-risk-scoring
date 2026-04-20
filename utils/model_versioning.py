@@ -12,9 +12,13 @@ PROJECT_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..")
 )
 
-MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "risk_model.pkl")
-METADATA_PATH = os.path.join(PROJECT_ROOT, "models", "metadata.json")
 
+METADATA_PATH = os.path.join(PROJECT_ROOT, "models", "metadata.json")
+MODEL_PATH = os.path.join(
+    PROJECT_ROOT,
+    "models",
+    "risk_model_v2.pkl"
+)
 
 # =====================================================
 # VERSION CONFIG

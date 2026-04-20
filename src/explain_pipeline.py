@@ -1,16 +1,8 @@
 """
 Explainability Module
 ---------------------
-
 Hybrid Explainable AI layer for the
 Behavior-Based Micro Risk Scoring System.
-
-Combines:
-- Feature contribution scoring
-- LIME model explanations
-- Rule-based reasoning
-- Natural language interpretation
-- Explanation confidence scoring
 """
 
 from typing import Dict, List, Tuple, Union, TYPE_CHECKING
@@ -18,17 +10,14 @@ from typing import Dict, List, Tuple, Union, TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
 
-# =====================================================
-# IMPORTS
-# =====================================================
 import pandas as pd
+import numpy as np
 
 from src.explain.lime_explainer import explain_instance
 from src.rules import rule_engine
 
-
 # =====================================================
-# FEATURE LIST (GLOBAL — ERROR FIX)
+# FEATURE LIST
 # =====================================================
 FEATURES = [
     "payment_discipline_score",
@@ -36,50 +25,50 @@ FEATURES = [
     "financial_resilience_score"
 ]
 
+# =====================================================
+# SAFE FLOAT
+# =====================================================
+def safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except:
+        return default
 
 # =====================================================
-# FEATURE CONTRIBUTIONS (RULE WEIGHTS)
+# FEATURE CONTRIBUTIONS (🔥 FIXED SCALE)
 # =====================================================
-def calculate_feature_contributions(
-    row: Union[dict, "pd.Series"]
-) -> Dict[str, float]:
+def calculate_feature_contributions(row: Union[dict, "pd.Series"]) -> Dict[str, float]:
 
-    payment = float(row["payment_discipline_score"])
-    income = float(row["income_stability_index"])
-    resilience = float(row["financial_resilience_score"])
+    # 🔥 normalize (0–100 → 0–1)
+    payment = safe_float(row.get("payment_discipline_score")) / 100
+    income = safe_float(row.get("income_stability_index")) / 100
+    resilience = safe_float(row.get("financial_resilience_score")) / 100
 
-    contributions = {
-        "payment_discipline_score": round(0.4 * payment, 2),
-        "income_stability_index": round(0.3 * income, 2),
-        "financial_resilience_score": round(0.3 * resilience, 2),
+    return {
+        "payment_discipline_score": round(0.4 * payment, 4),
+        "income_stability_index": round(0.3 * income, 4),
+        "financial_resilience_score": round(0.3 * resilience, 4),
     }
 
-    return contributions
-
-
 # =====================================================
-# RANK MOST IMPORTANT FACTORS
+# RANK
 # =====================================================
-def rank_risk_factors(
-    contributions: Dict[str, float],
-    top_k: int = 3
-) -> List[Tuple[str, float]]:
+def rank_risk_factors(contributions: Dict[str, float], top_k: int = 3):
 
     ranked = sorted(
         contributions.items(),
-        key=lambda x: abs(float(x[1])),
+        key=lambda x: abs(safe_float(x[1])),
         reverse=True
     )
 
     return [(str(name), float(value)) for name, value in ranked[:top_k]]
 
-
 # =====================================================
-# NATURAL LANGUAGE EXPLANATION
+# TEXT
 # =====================================================
-def generate_explanation_text(
-    top_factors: List[Tuple[str, float]]
-) -> str:
+def generate_explanation_text(top_factors):
 
     if not top_factors:
         return "Risk is influenced by multiple behavioral factors."
@@ -87,14 +76,9 @@ def generate_explanation_text(
     main_factor = top_factors[0][0]
 
     explanations = {
-        "payment_discipline_score":
-            "Risk level is mainly driven by payment discipline behavior.",
-
-        "income_stability_index":
-            "Income stability has the strongest influence on the risk score.",
-
-        "financial_resilience_score":
-            "Financial resilience significantly impacts overall risk.",
+        "payment_discipline_score": "Risk is mainly driven by payment discipline behavior.",
+        "income_stability_index": "Income stability has the strongest influence on risk.",
+        "financial_resilience_score": "Financial resilience significantly impacts risk."
     }
 
     return explanations.get(
@@ -102,89 +86,89 @@ def generate_explanation_text(
         "Risk is influenced by multiple behavioral factors."
     )
 
-
 # =====================================================
-# FORMAT LIME OUTPUT (FASTAPI SAFE)
+# FORMAT LIME (🔥 FIXED SCALE)
 # =====================================================
-def format_lime_output(
-    lime_list: List[Tuple[str, float]]
-) -> List[Dict]:
+def format_lime_output(lime_list):
 
     formatted = []
 
-    for feature, impact in lime_list:
-        formatted.append({
-            "feature": str(feature),
-            "impact": float(round(impact, 4))
-        })
+    for item in lime_list:
+
+        try:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                feature, impact = item
+
+            elif isinstance(item, dict):
+                feature = item.get("feature", "")
+                impact = item.get("impact", 0)
+
+            elif isinstance(item, str):
+                feature = item
+                impact = 0
+
+            else:
+                continue
+
+            try:
+                impact = float(impact)
+            except:
+                impact = 0.0
+
+            formatted.append({
+                "feature": str(feature).split(" ")[0],
+                "impact": round(impact, 4)  # 🔥 FIX: no *100
+            })
+
+        except:
+            continue
 
     return formatted
 
-
 # =====================================================
-# 🔥 NEW: RULE SCORECARD (EKLENDİ)
+# RULE SCORE
 # =====================================================
 def calculate_rule_scorecard(rules: List[Dict]) -> float:
-    """
-    Aggregates rule impacts into a single score.
-    Positive = risk increase
-    Negative = risk decrease
-    """
+
     score = 0.0
 
     for r in rules:
-        try:
-            score += float(r.get("impact", 0))
-        except Exception:
-            continue
+        score += safe_float(r.get("impact", 0))
 
     return round(score, 3)
 
-
 # =====================================================
-# EXPLANATION CONFIDENCE SCORE
+# CONFIDENCE
 # =====================================================
-def calculate_explanation_confidence(
-    rule_factors: List[Tuple[str, float]],
-    lime_factors: List[Dict],
-    top_k: int = 3
-) -> float:
-    """
-    Measures agreement between rule-based
-    and LIME explanations.
-    """
+def calculate_explanation_confidence(rule_factors, lime_factors, top_k: int = 3):
 
     rule_top = {name for name, _ in rule_factors[:top_k]}
-    lime_top = {item["feature"] for item in lime_factors[:top_k]}
+    lime_top = {item["feature"] for item in lime_factors[:top_k] if "feature" in item}
 
     if not rule_top:
         return 0.0
 
-    overlap = rule_top.intersection(lime_top)
-
-    confidence = len(overlap) / len(rule_top)
-
-    return round(confidence, 2)
-
+    return round(len(rule_top.intersection(lime_top)) / len(rule_top), 2)
 
 # =====================================================
-# MAIN EXPLAINABILITY PIPELINE
+# MAIN PIPELINE (🔥 FIXED)
 # =====================================================
-def build_explanation(
-    row: Union[dict, "pd.Series"],
-    model
-) -> Dict:
-    """
-    MASTER EXPLAINABILITY PIPELINE
-    """
+def build_explanation(row: Union[dict, "pd.Series"], model):
 
-    # -----------------------------------
-    # SAFE ROW CONVERSION (API / DB SAFE)
-    # -----------------------------------
     if not isinstance(row, dict):
         row = dict(row)
 
     row_series = pd.Series(row)
+
+    # -----------------------------------
+    # FEATURE VECTOR
+    # -----------------------------------
+    feature_vector = np.array([
+        [
+            safe_float(row_series.get(f, 0))
+            for f in FEATURES
+        ]
+    ])
 
     # -----------------------------------
     # Feature Contributions
@@ -192,39 +176,50 @@ def build_explanation(
     contributions = calculate_feature_contributions(row_series)
 
     # -----------------------------------
-    # Rank Factors
+    # Rank
     # -----------------------------------
     ranked = rank_risk_factors(contributions)
 
     # -----------------------------------
-    # Natural Language Explanation
+    # Text
     # -----------------------------------
     explanation_text = generate_explanation_text(ranked)
 
     # -----------------------------------
-    # LIME Explanation
+    # LIME
     # -----------------------------------
-    feature_vector = row_series[FEATURES]
+    lime_explanation = []
 
-    lime_raw = explain_instance(
-        feature_vector,
-        model
-    )
+    try:
+        lime_raw = explain_instance(
+            feature_vector[0],
+            model
+        )
 
-    lime_explanation = format_lime_output(lime_raw)
+        lime_explanation = format_lime_output(lime_raw)
+
+    except Exception as e:
+        print("⚠ LIME FAILED:", e)
+        lime_explanation = []
 
     # -----------------------------------
-    # Rule Engine Explanation
+    # RULE ENGINE (🔥 FIXED STRUCTURE)
     # -----------------------------------
-    rules = rule_engine(row_series)
+    try:
+        rule_result = rule_engine(row_series)
 
-    # -----------------------------------
-    # 🔥 NEW: RULE SCORECARD HESAPLA
-    # -----------------------------------
+        if isinstance(rule_result, dict):
+            rules = rule_result.get("detailed_rules", [])
+        else:
+            rules = rule_result
+
+    except:
+        rules = []
+
     rule_score = calculate_rule_scorecard(rules)
 
     # -----------------------------------
-    # Explanation Confidence
+    # CONFIDENCE
     # -----------------------------------
     confidence_score = calculate_explanation_confidence(
         ranked,
@@ -232,20 +227,15 @@ def build_explanation(
     )
 
     # -----------------------------------
-    # FINAL RESPONSE (GENİŞLETİLDİ)
+    # FINAL OUTPUT
     # -----------------------------------
     return {
         "feature_contributions": contributions,
         "top_risk_factors": ranked,
         "natural_language": explanation_text,
-
         "lime_explanation": lime_explanation,
-
         "rule_based_explanations": rules,
-        "rule_based_score": rule_score,   # ✅ YENİ
-
+        "rule_based_score": rule_score,
         "confidence_score": confidence_score,
-
-        "explanation_method":
-            "Hybrid (Rule Engine + LIME + Feature Attribution)"
+        "explanation_method": "Hybrid (Rule Engine + LIME + Feature Attribution)"
     }

@@ -33,9 +33,9 @@ risk_score = (
 
 
 risk_band = pd.cut(
-    risk_score,
-    bins=[-1, 50, 75, 100],
-    labels=["High", "Medium", "Low"]
+    risk_score / 100,
+    bins=[-0.01, 0.33, 0.66, 1],  # 🔥 FIX
+    labels=["Low", "Medium", "High"]
 )
 
 data = {

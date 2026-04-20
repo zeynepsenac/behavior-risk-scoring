@@ -32,7 +32,7 @@ class FeatureContribution(BaseModel):
 
 
 # =====================================================
-# ✅ RULE-BASED EXPLAINABILITY MODEL
+# RULE-BASED EXPLAINABILITY MODEL
 # =====================================================
 
 class RuleItem(BaseModel):
@@ -41,11 +41,22 @@ class RuleItem(BaseModel):
 
 
 # =====================================================
-# MAIN RISK RESPONSE (✅ EXTENDED — BACKWARD SAFE)
+# MODEL INFO
+# =====================================================
+
+class ModelInfo(BaseModel):
+    model_version: str
+    model_hash: str
+
+
+# =====================================================
+# MAIN RISK RESPONSE (🔥 FINAL CLEAN VERSION)
 # =====================================================
 
 class RiskResponse(BaseModel):
     customer_id: int
+
+    # 🔹 mevcut alanlar (DEĞİŞMEDİ)
     original_risk_score: float
     predicted_risk_score: float
     risk_band: str
@@ -55,19 +66,27 @@ class RiskResponse(BaseModel):
     components: RiskComponents
     label_comparison: LabelComparison
 
-    # ✅ EXISTING
-    lime_explanation: Optional[List[Dict]] = None
+    # 🔥 LIME KALDIRILDI → YENİ ALAN
+    explanations: Optional[List[FeatureContribution]] = None
 
-    # ✅ RULE ENGINE (FIXED STRUCTURE)
     rule_based_score: Optional[float] = None
     rule_explanations: Optional[List[RuleItem]] = None
 
-    # ✅ EXISTING
+    model_info: Optional[ModelInfo] = None
     score_metadata: Optional[Dict[str, str]] = None
+
+    # =====================================================
+    # 🔥 EK ALANLAR (DEĞİŞMEDİ)
+    # =====================================================
+
+    ml_score: Optional[float] = None
+    rule_score: Optional[float] = None
+    final_score: Optional[float] = None
+    base_value: Optional[float] = None
 
 
 # =====================================================
-# 🆕 SIMPLE RESPONSE (YENİ EKLENDİ)
+# SIMPLE RESPONSE
 # =====================================================
 
 class SimpleRiskResponse(BaseModel):
@@ -104,7 +123,7 @@ class BatchRequest(BaseModel):
 
 
 # =====================================================
-# ✅ FIXED BATCH RESULT (CRASH ÖNLER)
+# BATCH RESULT
 # =====================================================
 
 class BatchResult(BaseModel):
@@ -115,7 +134,6 @@ class BatchResult(BaseModel):
     risk_label: Optional[str] = None
     risk_color: Optional[str] = None
 
-    # ✅ ERROR HANDLING EKLENDİ
     error: Optional[str] = None
 
 

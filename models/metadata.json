@@ -1,7 +1,7 @@
 {
-    "model_hash": "b02a4b90e9feb18d0ef31562d8c2fa4a46c7b5812790cc777c6110e8a87b7c65",
-    "trained_at": "2026-04-08T16:11:12.697592",
-    "feature_version": "v1",
+    "model_hash": "01bdf4e5b839f3508f8ce97b704889e62656edb1acea395063f504a65b71471b",
+    "trained_at": "2026-04-16T19:09:43.360905",
+    "feature_version": "v2_safe",
     "dataset_version": "v1.0",
     "features": [
         "payment_discipline_score",

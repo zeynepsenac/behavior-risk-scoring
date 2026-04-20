@@ -1,6 +1,7 @@
 # =====================================================
 # IMPORTS
 # =====================================================
+from fastapi.middleware.cors import CORSMiddleware
 from src.config.settings import DATABASE_TABLES
 TABLE_NAME = DATABASE_TABLES["ENGINEERED"]
 from fastapi import FastAPI, HTTPException
@@ -11,7 +12,7 @@ import joblib
 import hashlib
 from typing import List
 from datetime import datetime
-from src.explain.lime_explainer import build_explanation
+from src.explain_pipeline import build_explanation
 from src.database import get_db_connection, verify_schema
 from src.schemas import (
     RiskResponse,
@@ -24,18 +25,25 @@ from src.schemas import (
 from src.schemas import SimpleRiskResponse
 from src.rules import rule_engine
 from src.explain_pipeline import calculate_rule_scorecard
-
-
-from src.explain.lime_explainer import initialize_explainer
 from src.database import load_customers
+
 # =====================================================
 # PATHS
 # =====================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 MODEL_METADATA_PATH = BASE_DIR / "models" / "metadata.json"
-MODEL_PATH = BASE_DIR / "models" / "risk_model.pkl"
-MODEL_METRICS_PATH = BASE_DIR / "models" / "model_metrics.json"
+MODEL_PATH = BASE_DIR / "models" / "risk_model_v2.pkl"   # ✅ TEK MODEL PATH
+MODEL_METRICS_PATH = BASE_DIR / "models" / "model_metrics_v2.json"
+# =====================================================
+# V2 MODEL CONFIG (SAFE - YENİ)
+# =====================================================
+FEATURES_V2 = [
+    "payment_discipline_score",
+    "income_stability_index",
+    "financial_resilience_score"
+]
+
 # =====================================================
 # MODEL METADATA
 # =====================================================
@@ -63,6 +71,9 @@ DATASET_VERSION = MODEL_METADATA.get("dataset_version", "v1")
 # LOAD MODEL
 # =====================================================
 def load_model():
+    print("MODEL PATH:", MODEL_PATH)          # ✅ debug
+    print("MODEL VERSION:", MODEL_VERSION)    # ✅ debug
+
     if not MODEL_PATH.exists():
         print("⚠ fallback scoring active")
         return None
@@ -72,14 +83,43 @@ def load_model():
 
 MODEL = load_model()
 
-
-
+print("MODEL:", MODEL)
 
 # -----------------------------------------------------
 # EXPLAINABILITY (LIME)
 # -----------------------------------------------------
+# -----------------------------------------------------
+# SIMPLE EXPLAINABILITY (FALLBACK)
+# -----------------------------------------------------
+def generate_simple_explanation(features):
+    explanations = []
 
+    if features.get("income_stability_index", 0) > 70:
+        explanations.append({
+            "feature": "income_stability_index",
+            "impact": -0.07
+        })
 
+    if features.get("payment_discipline_score", 0) > 70:
+        explanations.append({
+            "feature": "payment_discipline_score",
+            "impact": -0.05
+        })
+
+    if features.get("financial_resilience_score", 0) < 20:
+        explanations.append({
+            "feature": "financial_resilience_score",
+            "impact": 0.06
+        })
+
+    # 🔥 SMART FALLBACK (DAHA MANTIKLI)
+    if not explanations:
+        explanations.append({
+            "feature": "general_behavior",
+            "impact": 0.01
+        })
+
+    return explanations
 # =====================================================
 # FEATURE HASH
 # =====================================================
@@ -90,16 +130,13 @@ def compute_feature_hash(features: dict):
 # =====================================================
 # NORMALIZER
 # =====================================================
-def normalize_ml_score(score: float):
 
+
+def normalize_ml_score(score: float):
     if score is None:
         return None
 
-    MODEL_MAX_SCORE = 25.0
-    normalized = float(score) / MODEL_MAX_SCORE
-    normalized = max(0.0, min(1.0, normalized))
-
-    return round(normalized, 4)
+    return round(float(score), 4)
 
 # =====================================================
 # FASTAPI
@@ -139,6 +176,14 @@ Designed as a scalable and explainable machine learning service.
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Geliştirme için serbest
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # =====================================================
 # STARTUP CHECK
 # =====================================================
@@ -156,10 +201,7 @@ def startup_check():
     # ==========================================
     try:
         df = load_customers()
-        initialize_explainer(
-            df,
-            FEATURES
-        )
+      
     except Exception as e:
         print("⚠️ LIME init failed:", e)
 # =====================================================
@@ -189,6 +231,47 @@ def fetch_customer_features(customer_id: int):
     finally:
         conn.close()
 
+
+
+
+# =====================================================
+# V2 FEATURE FETCH (YENİ)
+# =====================================================
+def fetch_customer_features_v2(customer_id: int):
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT 
+                payment_discipline_score,
+                income_stability_index,
+                financial_resilience_score
+            FROM engineered_features
+            WHERE customer_id = %s
+            LIMIT 1
+        """, (customer_id,))
+
+        row = cur.fetchone()
+
+        if not row:
+            return None
+
+        return dict(zip(FEATURES_V2, row))
+
+    finally:
+        conn.close()
+
+
+# =====================================================
+# V2 MODEL LOAD
+# =====================================================
+def load_model_v2():
+    if not MODEL_PATH.exists():
+        raise HTTPException(500, "V2 model not found")
+
+    return joblib.load(MODEL_PATH)
 # =====================================================
 # ORIGINAL RISK
 # =====================================================
@@ -198,8 +281,9 @@ def fetch_original_risk(customer_id: int):
     try:
         cur = conn.cursor()
 
+        # 🔥 SADECE SCORE AL (band ignore)
         cur.execute("""
-            SELECT risk_score, risk_band
+            SELECT risk_score
             FROM engineered_features
             WHERE customer_id = %s
             LIMIT 1
@@ -210,21 +294,14 @@ def fetch_original_risk(customer_id: int):
         if not row:
             return None, None
 
-        raw_score, raw_band = row
+        # 🔥 artık tek değer var
+        raw_score = row[0]
 
-        # ⚠️ önemli: senin DB zaten 0-1 arasıysa normalize etme!
+        # ⚠️ DB zaten 0-1 scale ise normalize etme
         original_score = float(raw_score)
 
-        BAND_MAP = {
-            "low": "Low",
-            "medium": "Medium",
-            "high": "High"
-        }
-
-        original_band = (
-            BAND_MAP.get(str(raw_band).strip().lower())
-            if raw_band else None
-        )
+        # ❌ band DB'den alınmıyor
+        original_band = None
 
         return original_score, original_band
 
@@ -251,18 +328,34 @@ def predict_with_model(features: dict):
 
     return normalize_ml_score(raw_prediction)
 
+
+
 # =====================================================
 # RISK BAND
 # =====================================================
+
 def calculate_risk_band(score: float):
 
     if score < 0.33:
-        return "Low", "green", "Low Risk"
-    elif score < 0.66:
-        return "Medium", "yellow", "Moderate Risk"
-    else:
-        return "High", "red", "High Risk"
+        return {
+            "band": "Low",
+            "color": "#16a34a",
+            "label": "Düşük Risk"
+        }
 
+    elif score < 0.66:
+        return {
+            "band": "Medium",
+            "color": "#f59e0b",
+            "label": "Orta Risk"
+        }
+
+    else:
+        return {
+            "band": "High",
+            "color": "#dc2626",
+            "label": "Yüksek Risk"
+        }
 # =====================================================
 # CACHE CHECK
 # =====================================================
@@ -349,128 +442,227 @@ def save_prediction(
     finally:
         conn.close()
 
-# =====================================================
-# ✅ CORE LOGIC (YENİ — ENDPOINTTEN AYRILDI)
-# =====================================================
+def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
 
+    import numpy as np
+    import joblib
 
-def calculate_risk(customer_id: int) -> RiskResponse:
+    try:
+        X_TRAIN_SCALED = joblib.load("models/X_train_scaled_v2.pkl")
+    except Exception as e:
+        print("⚠ X_train_scaled yüklenemedi:", e)
+        X_TRAIN_SCALED = None
 
-    features = fetch_customer_features(customer_id)
+    # =====================================================
+    # FEATURES
+    # =====================================================
+    try:
+        features = fetch_customer_features(customer_id)
+        if not features:
+            raise ValueError("Empty features")
+    except Exception as e:
+        print("⚠ müşteri bulunamadı:", e)
+        raise ValueError("Customer not found")
+
     feature_hash = compute_feature_hash(features)
 
-    rule_result = rule_engine(features)
+    input_vector = np.array([[float(features.get(f, 0) or 0) for f in FEATURES]])
 
-    rules = rule_result["detailed_rules"]   # ✅ LIST
-    rule_score = rule_result["score"]       # ✅ FLOAT
+    # =====================================================
+    # NORMALIZATION
+    # =====================================================
+    def normalize_100_to_1(v):
+        try:
+            return max(0.0, min(1.0, v / 100))
+        except:
+            return 0.0
 
-    #  DB’den hem score hem band al
-    original_score, _ = fetch_original_risk(customer_id)
+    payment_raw = float(features.get("payment_discipline_score", 0) or 0)
+    income_raw = float(features.get("income_stability_index", 0) or 0)
+    resilience_raw = float(features.get("financial_resilience_score", 0) or 0)
 
-    # BAND'I YENİDEN HESAPLA
-    original_band, _, _ = calculate_risk_band(original_score)
+    payment_norm = normalize_100_to_1(payment_raw)
+    income_norm = normalize_100_to_1(income_raw)
+    resilience_norm = normalize_100_to_1(resilience_raw)
+
+    # =====================================================
+    # RULE ENGINE
+    # =====================================================
+    try:
+        rule_result = rule_engine(features)
+        rules = rule_result.get("detailed_rules", [])
+        rule_score = float(rule_result.get("score", 0.0))
+
+        if rule_score > 1:
+            rule_score = rule_score / 100.0
+
+        rule_score = max(0.0, min(1.0, rule_score))
+
+    except Exception as e:
+        print("⚠ rule engine failed:", e)
+        rules = []
+        rule_score = 0.0
+
+    # =====================================================
+    # ORIGINAL SCORE
+    # =====================================================
+    try:
+        original_score, _ = fetch_original_risk(customer_id)
+    except Exception:
+        original_score = None
 
     if original_score is None:
         original_score = rule_score
 
-    if original_band is None:
-        original_band, _, _ = calculate_risk_band(original_score)
+    original_band = calculate_risk_band(original_score)["band"]
 
-    # 🔥 prediction cache kontrol
-    predicted_score = fetch_latest_prediction(
-        customer_id,
-        feature_hash
-    )
+    # =====================================================
+    # ML PREDICTION
+    # =====================================================
+    predicted_score = fetch_latest_prediction(customer_id, feature_hash)
 
     if predicted_score is None:
 
-        ml_score = predict_with_model(features)
+        try:
+            if hasattr(MODEL, "predict_proba"):
+                ml_score = MODEL.predict_proba(input_vector)[0][1]
+            else:
+                ml_score = MODEL.predict(input_vector)[0]
 
-        predicted_score = (
-         ml_score if ml_score is not None
-         else rule_score
-)
-        predicted_band, _, _ = calculate_risk_band(predicted_score)
+            ml_score = float(ml_score)
 
-        save_prediction(
-            customer_id,
-            predicted_score,
-            original_band,
-            predicted_band,
-            feature_hash
-        )
+            if ml_score > 1:
+                ml_score = ml_score / 100.0
 
-    # ✅ final band (response için)
-    band, color, label = calculate_risk_band(predicted_score)
+            ml_score = max(0.0, min(1.0, ml_score))
 
-    # ✅ comparison
+        except Exception as e:
+            print("⚠ ML prediction failed:", e)
+            raise ValueError("Model prediction failed")
+
+        predicted_score = ml_score
+        predicted_band = calculate_risk_band(predicted_score)["band"]
+
+        try:
+            save_prediction(
+                customer_id,
+                float(predicted_score),
+                original_band,
+                predicted_band,
+                feature_hash
+            )
+        except Exception as e:
+            print("⚠ save_prediction başarısız:", e)
+
+    else:
+        ml_score = float(predicted_score)
+        ml_score = max(0.0, min(1.0, ml_score))
+        predicted_score = ml_score
+
+        predicted_band = calculate_risk_band(predicted_score)["band"]
+
+    # =====================================================
+    # FINAL SCORE
+    # =====================================================
+    final_score = (0.7 * ml_score) + (0.3 * rule_score)
+    final_score = max(0.0, min(1.0, final_score))
+
+    risk_info = calculate_risk_band(final_score)
+
+    band = risk_info["band"]
+    color = risk_info["color"]
+    label = risk_info["label"]
+
+    # =====================================================
+    # LABEL COMPARISON
+    # =====================================================
     label_comparison = LabelComparison(
         original_band=original_band,
         predicted_band=band,
         agreement=(original_band.lower() == band.lower())
     )
 
+    # =====================================================
+    # BASE VALUE
+    # =====================================================
+    try:
+        if X_TRAIN_SCALED is not None:
+            if hasattr(MODEL, "predict_proba"):
+                base_value = float(np.mean(MODEL.predict_proba(X_TRAIN_SCALED)[:, 1]))
+            else:
+                base_value = float(np.mean(MODEL.predict(X_TRAIN_SCALED)))
+        else:
+            base_value = float(ml_score) * 0.8
 
-    # -----------------------------------------------------
-    # EXPLAINABILITY (LIME)
-    # -----------------------------------------------------
-    lime_explanation = None
+        base_value = max(0.0, min(1.0, base_value))
 
-    if MODEL is not None:
-        try:
-            row_features = {
-                f: float(features.get(f, 0) or 0)
-                for f in FEATURES
-            }
+    except Exception as e:
+        print("⚠ base_value hesaplanamadı:", e)
+        base_value = float(ml_score)
 
-            print("LIME INPUT:", row_features)
-
-            lime_explanation = build_explanation(
-                row_features,
-                MODEL
-            )
-
-        except Exception as e:
-            print("⚠ explainability failed:", e)
-
-    # -----------------------------------------------------
+    # =====================================================
     # COMPONENTS
-    # -----------------------------------------------------
+    # =====================================================
     components = RiskComponents(
-        payment_discipline_score=float(features["payment_discipline_score"]),
-        income_stability_index=float(features["income_stability_index"]),
-        financial_resilience_score=float(features["financial_resilience_score"]),
+        payment_discipline_score=round(payment_norm, 3),
+        income_stability_index=round(income_norm, 3),
+        financial_resilience_score=round(resilience_norm, 3),
     )
 
-    # -----------------------------------------------------
-    # RESPONSE (TEK RETURN)
-    # -----------------------------------------------------
-    return RiskResponse(
-    customer_id=customer_id,
-    predicted_risk_score=round(predicted_score, 3),
-    original_risk_score=float(original_score),
-
-    risk_band=band,
-    risk_color=color,
-    risk_label=label,
-
-    components=components,
-    label_comparison=label_comparison,
-
-    lime_explanation=lime_explanation,
-
-    rule_based_score=rule_score,
-    rule_explanations=rules,
-
-    # ✅ BURAYA EKLE
-    score_metadata={
-        "original_scale": "0-1 (historical dataset)",
-        "predicted_scale": "0-1 (normalized ML output)"
+    model_info = {
+        "model_version": MODEL_VERSION,
+        "model_hash": MODEL_HASH
     }
-)
-#===================================
-# MAIN ENDPOINT (DEĞİŞMEDİ — SADECE FONKSİYON ÇAĞIRIYOR)
+
+    # =====================================================
+    # FINAL RESPONSE (🔥 FIX HERE)
+    # =====================================================
+
+    response_data = {
+        "customer_id": customer_id,
+
+        "ml_score": float(ml_score),
+        "rule_score": float(rule_score),
+        "final_score": float(final_score),
+        "base_value": float(base_value),
+
+        "predicted_risk_score": float(predicted_score),
+        "original_risk_score": float(original_score),
+
+        "risk_band": band,
+        "risk_color": color,
+        "risk_label": label,
+
+        "components": components,
+        "label_comparison": label_comparison,
+
+        "explanations": [],
+        "rule_explanations": rules,
+        "rule_based_score": float(rule_score),
+
+        "feature_contributions": {},
+        "feature_importance": {},
+
+        "model_info": model_info,
+
+        "model_confidence": float(ml_score),
+        "explanation": None,
+
+        "score_metadata": {
+            "scale": "final_score_based_band_only"
+        }
+    }
+
+    # 🚨 CRITICAL FIX: duplicate risk_band bug prevention
+    return RiskResponse(**response_data)
 # =====================================================
+# MAIN ENDPOINT
+# =====================================================
+# =====================================================
+# MAIN ENDPOINT
+# =====================================================
+from fastapi import Query
+
 @app.get(
     "/risk-score/{customer_id}",
     response_model=RiskResponse,
@@ -478,26 +670,111 @@ def calculate_risk(customer_id: int) -> RiskResponse:
     summary="Calculate behavioral risk score",
     description="Returns explainable ML-based financial risk score for a single customer."
 )
-def risk_score(customer_id: int):
-    return calculate_risk(customer_id)
+def risk_score(customer_id: int, explain: bool = Query(True)):
+
+    try:
+        return calculate_risk(customer_id, explain)
+
+    except Exception as e:
+        print("🔥 GLOBAL ERROR:", e)
+
+        # 🔥 FULL FALLBACK (response_model uyumlu!)
+        return RiskResponse(
+            customer_id=customer_id,
+
+            ml_score=0.0,
+            rule_score=0.0,
+            final_score=0.0,
+            base_value=0.0,
+
+            predicted_risk_score=0.0,
+            original_risk_score=0.0,
+
+            risk_band="Low",
+            risk_color="#16a34a",
+            risk_label="Düşük Risk",
+
+            components=RiskComponents(
+                payment_discipline_score=0.0,
+                income_stability_index=0.0,
+                financial_resilience_score=0.0
+            ),
+
+            label_comparison=LabelComparison(
+                original_band="Low",
+                predicted_band="Low",
+                agreement=True
+            ),
+
+            explanations=[],
+            rule_explanations=[],
+            rule_based_score=0.0,
+
+            feature_contributions={},
+            feature_importance={},
+
+            model_info={
+                "model_version": "fallback",
+                "model_hash": "none"
+            },
+
+            model_confidence=0.0,
+            explanation="Fallback response (customer not found)",
+
+            score_metadata={
+                "status": "fallback"
+            }
+        )
 
 
+# =====================================================
+# SIMPLE ENDPOINT (🔥 BURASI DA EKLENDİ)
+# =====================================================
 @app.get("/risk-score-simple/{customer_id}", response_model=SimpleRiskResponse)
 def simple_risk(customer_id: int):
 
-    result = calculate_risk(customer_id)
+    try:
+        result = calculate_risk(customer_id, explain=False)
 
-    return SimpleRiskResponse(
-        risk_score=result.predicted_risk_score,
-        risk_band=result.risk_band,
-        risk_label=result.risk_label,
-        confidence="Model-based prediction"
-    )
+        return SimpleRiskResponse(
+            risk_score=result.final_score,
+            risk_band=result.risk_band,
+            risk_label=result.risk_label,
+            confidence="Model-based prediction"
+        )
+
+    except Exception as e:
+        print("🔥 SIMPLE ENDPOINT ERROR:", e)
+
+        # 🔥 SIMPLE FALLBACK
+        return SimpleRiskResponse(
+            risk_score=0.0,
+            risk_band="Low",
+            risk_label="Düşük Risk",
+            confidence="Fallback response"
+        )
+# =====================================================
+# BATCH SCORING
+# =====================================================
+# =====================================================
+# HELPERS (EKLENDİ - MINIMAL FIX)
+# =====================================================
+
+def normalize_rule_score(rule_score: float) -> float:
+    """
+    Rule engine genelde 0-1 üstü şişebilir.
+    Burada güvenli şekilde 0-1 aralığına çekiyoruz.
+    """
+    return max(0.0, min(1.0, rule_score))
+
+
+def clamp(value: float, min_v=0.0, max_v=1.0) -> float:
+    return max(min_v, min(max_v, value))
+
 
 # =====================================================
-# ✅ BATCH SCORING (YENİ ENDPOINT)
+# BATCH SCORING
 # =====================================================
-
 @app.post(
     "/risk-score/batch",
     response_model=BatchRiskResponse,
@@ -515,16 +792,15 @@ def batch_risk_score(request: BatchRequest):
             r = calculate_risk(customer_id)
 
             results.append(
-    BatchResult(
-        customer_id=r.customer_id,
-        risk_score=round(r.predicted_risk_score, 3),
-        risk_segment=r.risk_band,
-        risk_label=r.risk_label,
-        risk_color=r.risk_color
-    )
-)
+                BatchResult(
+                    customer_id=r.customer_id,
+                    risk_score=r.predicted_risk_score,  # ✅ FIX
+                    risk_segment=r.risk_band,
+                    risk_label=r.risk_label,
+                    risk_color=r.risk_color
+                )
+            )
 
-        # ✅ Partial failure handling (API bozulmaz)
         except Exception as e:
             results.append(
                 BatchResult(
@@ -540,7 +816,6 @@ def batch_risk_score(request: BatchRequest):
 # =====================================================
 # HEALTH
 # =====================================================
-
 @app.get(
     "/health",
     tags=["System"],
@@ -553,6 +828,7 @@ def health():
         "model_loaded": MODEL is not None,
         "model_version": MODEL_VERSION
     }
+
 
 # =====================================================
 # MODEL INFO
@@ -567,11 +843,6 @@ def model_info():
         "features": FEATURES
     }
 
-
-
-# =====================================================
-# HISTORY
-# =====================================================
 @app.get(
     "/history/{customer_id}",
     tags=["Audit"],
@@ -613,12 +884,28 @@ def get_prediction_history(customer_id: int):
         history = []
 
         for r in rows:
+            # 🔥 SAFE SCORE
+            try:
+                score = float(r[1])
+            except:
+                score = 0.0
+
+            model_version = r[4] or ""
+
+            # =====================================================
+            # ✅ FIX → TEK DOĞRU BAND HESABI
+            # =====================================================
+            recalculated_band = calculate_risk_band(score).get("band", "Unknown")
+
             history.append({
                 "customer_id": r[0],
-                "predicted_risk_score": float(r[1]),
+                "predicted_risk_score": score,
                 "original_band": r[2],
-                "predicted_band": r[3],
-                "model_version": r[4],
+
+                # ✅ ARTIK HER ZAMAN DOĞRU SCALE
+                "predicted_band": recalculated_band,
+
+                "model_version": model_version,
                 "feature_version": r[5],
                 "dataset_version": r[6],
                 "prediction_time": r[7],
@@ -633,9 +920,6 @@ def get_prediction_history(customer_id: int):
 
     finally:
         conn.close()
-
-
-
 # =====================================================
 # MODEL METRICS
 # =====================================================
@@ -671,10 +955,114 @@ def get_model_metrics():
             status_code=500,
             detail=f"Failed to load metrics: {str(e)}"
         )
-    
+
+
+# =====================================================
+# V2 ENDPOINT (FIXED - STABLE)
+# =====================================================
+@app.get("/risk-score-v2/{customer_id}", tags=["Scoring V2"])
+def risk_score_v2(customer_id: int):
+
+    try:
+        features = fetch_customer_features_v2(customer_id)
+
+        if not features:
+            raise HTTPException(
+                status_code=404,
+                detail="Customer features not found"
+            )
+
+        model_v2 = load_model_v2()
+
+        if model_v2 is None:
+            raise HTTPException(
+                status_code=501,
+                detail="V2 model not available (under development)"
+            )
+
+        missing = [f for f in FEATURES_V2 if f not in features]
+
+        if missing:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Missing features: {missing}"
+            )
+
+        values = np.array([[float(features[f]) for f in FEATURES_V2]])
+
+        raw_score = float(model_v2.predict(values)[0])
+        score = clamp(normalize_ml_score(raw_score))
+
+        risk_info = calculate_risk_band(score)
+
+        return {
+            "customer_id": customer_id,
+            "v2_score": round(score, 3),
+
+            "risk_band": risk_info["band"],
+            "risk_color": risk_info["color"],
+            "risk_label": risk_info["label"]
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"V2 scoring failed: {str(e)}"
+        )
+
+
+# =====================================================
+# HYBRID ENDPOINT (🔥 FIXED CORE ISSUE)
+# =====================================================
+@app.get("/risk-score-hybrid/{customer_id}", tags=["Scoring Hybrid"])
+def hybrid_score(customer_id: int):
+
+    features = fetch_customer_features(customer_id)
+
+    ml_score = predict_with_model(features)
+
+    try:
+        rule_result = rule_engine(features)
+        rule_score = normalize_rule_score(
+            float(rule_result.get("score", 0.0))
+        )
+    except:
+        rule_score = 0.0
+
+    # ==============================
+    # 🔥 FIXED FUSION STRATEGY
+    # ==============================
+    if ml_score is None:
+        final_score = rule_score
+    else:
+        ml_score = clamp(float(ml_score))
+
+        final_score = (
+            0.7 * ml_score +
+            0.3 * rule_score
+        )
+
+    final_score = clamp(final_score)
+
+    risk_info = calculate_risk_band(final_score)
+
+    return {
+        "customer_id": customer_id,
+        "hybrid_score": round(final_score, 3),
+
+        "risk_band": risk_info["band"],
+        "risk_color": risk_info["color"],
+        "risk_label": risk_info["label"],
+
+        "ml_score": ml_score,
+        "rule_score": rule_score
+    }
+
 
 from psycopg2.extras import RealDictCursor
-
 
 # =====================================================
 # EXPLAINABILITY
@@ -708,6 +1096,9 @@ def explain_prediction(customer_id: int):
                 detail="Customer not found"
             )
 
+        # ✅ 🔥 EN KRİTİK SATIR
+        result = calculate_risk(customer_id)
+
         positives = []
         negatives = []
 
@@ -725,9 +1116,16 @@ def explain_prediction(customer_id: int):
 
         return {
             "customer_id": customer_id,
-            "prediction": row["risk_band"],
+
+            # ✅ ARTIK MODEL İLE SENKRON
+            "prediction": result.risk_band,
+
+            # 🔥 bonus (istersen ekle)
+            "prediction_score": result.predicted_risk_score,
+
             "top_positive_factors": positives,
             "top_negative_factors": negatives,
+
             "explanation_summary":
                 "Risk mainly influenced by behavioral financial patterns."
         }

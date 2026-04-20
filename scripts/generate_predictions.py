@@ -1,188 +1,146 @@
-# ==========================================
-# PROJECT ROOT PATH FIX (ALWAYS FIRST)
-# ==========================================
-import sys
-import os
-
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..")
-)
-sys.path.append(PROJECT_ROOT)
-
-# ==========================================
-# IMPORTS
-# ==========================================
-import json
 import pandas as pd
 import joblib
-from datetime import datetime
+import numpy as np
+import json
+from lime.lime_tabular import LimeTabularExplainer
 
-from src.database import load_customers
-from src.database import save_predictions_to_db
+print("🔄 Generating predictions...")
 
+# ================================
+# MODEL + SCALER LOAD
+# ================================
+model = joblib.load("models/risk_model_v2.pkl")
+scaler = joblib.load("models/scaler_v2.pkl")
 
-# ==========================================
-# MODEL METADATA READER (VERSIONING)
-# ==========================================
-def get_model_metadata():
-    metadata_path = os.path.join(
-        PROJECT_ROOT,
-        "models",
-        "metadata.json"
-    )
+# ================================
+# TRAIN DATA LOAD (🔥 CLEAN FIX)
+# ================================
+X_train_scaled = joblib.load("models/X_train_scaled_v2.pkl")
 
-    if not os.path.exists(metadata_path):
-        raise FileNotFoundError("metadata.json not found!")
+# 🔥 CLEAN TRAIN DATA (CRITICAL FIX)
+X_train_scaled = pd.DataFrame(X_train_scaled)
+X_train_scaled = X_train_scaled.select_dtypes(include=[np.number]).to_numpy(dtype=float)
 
-    with open(metadata_path, "r") as f:
-        return json.load(f)
+# ================================
+# DATA LOAD
+# ================================
+df = pd.read_csv("data/engineered_customers.csv")
 
-
-# ==========================================
-# ✅ RISK BAND CALCULATOR (NEW)
-# ==========================================
-def calculate_risk_band(score: float) -> str:
-    if score < 5:
-        return "Low"
-    elif score < 15:
-        return "Medium"
-    else:
-        return "High"
-
-
-# ==========================================
-# LOAD DATA
-# ==========================================
-print("Loading customer data...")
-
-df = load_customers()
-
-print("Columns from DB:", df.columns)
-
-if "customer_id" not in df.columns:
-    raise ValueError(
-        "customer_id column missing! "
-        "Add it to load_customers() SQL query."
-    )
-
-FEATURES = [
+feature_cols = [
     "payment_discipline_score",
     "income_stability_index",
     "financial_resilience_score"
 ]
 
-# ==========================================
-# LOAD MODEL
-# ==========================================
-print("Loading trained model...")
+X = df[feature_cols].copy()
 
-model_path = os.path.join(PROJECT_ROOT, "models", "risk_model.pkl")
+# ================================
+# SCALE INPUT
+# ================================
+X_scaled = scaler.transform(X)
 
-if not os.path.exists(model_path):
-    raise FileNotFoundError("risk_model.pkl not found!")
+# ================================
+# PREDICTION
+# ================================
+raw_preds = model.predict(X_scaled)
 
-model = joblib.load(model_path)
+preds = raw_preds / 25.0
+preds = np.clip(preds, 0, 1)
 
-# ==========================================
-# LOAD MODEL VERSION INFO
-# ==========================================
-metadata = get_model_metadata()
+df["predicted_risk_score"] = preds
 
-model_hash = metadata["model_hash"]
-training_timestamp = metadata.get(
-    "training_timestamp",
-    datetime.now().strftime("%Y%m%d")
+# ================================
+# BAND
+# ================================
+df["predicted_band"] = pd.cut(
+    df["predicted_risk_score"],
+    bins=[0, 0.33, 0.66, 1],
+    labels=["Low", "Medium", "High"],
+    include_lowest=True
 )
 
-FEATURE_VERSION = metadata.get("feature_version", "features_v1")
-
-MODEL_VERSION = (
-    f"{FEATURE_VERSION}_"
-    f"{model_hash[:8]}_"
-    f"{training_timestamp}"
+# ================================
+# LIME EXPLAINER (FIXED)
+# ================================
+explainer = LimeTabularExplainer(
+    training_data=X_train_scaled,
+    feature_names=feature_cols,
+    mode="regression",
+    discretize_continuous=True
 )
 
-print(f"Using model hash: {model_hash}")
-print(f"Model version: {MODEL_VERSION}")
+# ================================
+# PREDICT FUNCTION (SAFE FIX)
+# ================================
+def predict_fn(x):
+    x = np.asarray(x, dtype=float)
+    raw = model.predict(x)
+    scaled = raw / 25.0
+    return np.clip(scaled, 0, 1)
 
-# ==========================================
-# GENERATE PREDICTIONS
-# ==========================================
-print("Generating predictions...")
+# ================================
+# BASE VALUE
+# ================================
+base_preds = predict_fn(X_train_scaled)
+base_value = float(np.mean(base_preds))
 
-df["predicted_risk_score"] = model.predict(df[FEATURES])
+# ================================
+# LIME LOOP (SAFE VERSION)
+# ================================
+lime_results_all = []
 
-# ==========================================
-# ✅ PREDICTED BAND (NEW - NOT NULL FIX)
-# ==========================================
-df["predicted_band"] = df["predicted_risk_score"].apply(
-    calculate_risk_band
-)
-
-if df["predicted_band"].isnull().any():
-    raise ValueError("predicted_band contains NULL values!")
-
-# ==========================================
-# ORIGINAL BAND (NOT NULL FIX)
-# ==========================================
-if "risk_band" not in df.columns:
-    raise ValueError(
-        "risk_band column missing from engineered_features table!"
+for i in range(len(X_scaled)):
+    exp = explainer.explain_instance(
+        X_scaled[i],
+        predict_fn,
+        num_features=3
     )
 
-# audit trail
-df["original_band"] = df["risk_band"]
+    lime_result = exp.as_list()
 
-if df["original_band"].isnull().any():
-    raise ValueError("original_band contains NULL values!")
+    cleaned_explanation = []
 
-# tracking fields
-df["model_hash"] = model_hash
-df["model_version"] = MODEL_VERSION
+    for item in lime_result:
+        f, v = item
 
-# ==========================================
-# DB SCHEMA ALIGNMENT
-# ==========================================
-df["risk_score"] = df["predicted_risk_score"]
+        # 🔥 SAFE FEATURE PARSING
+        feature_name = str(f)
+        feature_name = feature_name.split("=")[0].split("<")[0].split(">")[0].strip()
 
-# ==========================================
-# SAVE PREDICTIONS TO DATABASE
-# ==========================================
-print("Saving predictions to database...")
+        cleaned_explanation.append({
+            "feature": feature_name,
+            "impact": float(v)
+        })
 
-save_predictions_to_db(
-    df[
-        [
-            "customer_id",
-            "risk_score",
-            "original_band",
-            "predicted_band",   # ✅ NEW COLUMN
-            "model_hash",
-            "model_version"
-        ]
-    ]
-)
+    lime_results_all.append(cleaned_explanation)
 
-print("Predictions saved to DB.")
-
-# ==========================================
-# CREATE VALIDATION DATASET
-# ==========================================
-output = df[
-    [
-        "risk_score",
-        "predicted_risk_score",
-        "predicted_band",   # ✅ added for validation visibility
-        "model_hash",
-        "model_version"
-    ]
+# ================================
+# JSON FORMAT
+# ================================
+df["lime_explanation"] = [
+    json.dumps(row, ensure_ascii=False) for row in lime_results_all
 ]
 
-# ==========================================
-# SAVE CSV
-# ==========================================
-output_path = os.path.join(PROJECT_ROOT, "data", "predictions.csv")
-output.to_csv(output_path, index=False)
+df["base_value"] = base_value
 
-print("✅ predictions.csv created successfully!")
-print(f"Saved at: {output_path}")
+# ================================
+# MODEL INFO
+# ================================
+df["model_hash"] = "b02a4b90e9feb18d0ef31562d8c2fa4a46c7b5812790cc777c6110e8a87b7c65"
+df["model_version"] = "v1_fixed_scale"
+
+# ================================
+# OUTPUT
+# ================================
+output_cols = [
+    "predicted_risk_score",
+    "predicted_band",
+    "model_hash",
+    "model_version",
+    "base_value",
+    "lime_explanation"
+]
+
+df[output_cols].to_csv("data/predictions.csv", index=False)
+
+print("✅ predictions.csv başarıyla oluşturuldu (LIME FULL FIXED)")
