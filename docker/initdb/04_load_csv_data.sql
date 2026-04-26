@@ -1,9 +1,7 @@
 DROP TABLE IF EXISTS staging_engineered_features;
 DROP TABLE IF EXISTS staging_synthetic_customers;
 
--- ===============================
--- STAGING TABLES
--- ===============================
+-- AŞAMA (STAGING) TABLOLARI
 
 CREATE TABLE IF NOT EXISTS staging_synthetic_customers (
     customer_id INT,
@@ -36,24 +34,24 @@ CREATE TABLE IF NOT EXISTS staging_engineered_features (
     financial_resilience_score NUMERIC
 );
 
--- ===============================
+
 -- LOAD synthetic_customers.csv
--- ===============================
+
 
 COPY staging_synthetic_customers
 FROM '/data/synthetic_customers.csv'
 DELIMITER ','
 CSV HEADER;
 
--- FK parent safety
+-- FK (Yabancı Anahtar) üst tablo güvenliği
 INSERT INTO customers(customer_id)
 SELECT DISTINCT customer_id
 FROM staging_synthetic_customers
 ON CONFLICT DO NOTHING;
 
--- ===============================
+
 -- STAGING → synthetic_customers
--- ===============================
+
 
 INSERT INTO synthetic_customers(
     customer_id,
@@ -87,9 +85,9 @@ ON CONFLICT (customer_id) DO UPDATE SET
     employment_duration_months = EXCLUDED.employment_duration_months,
     account_age_months = EXCLUDED.account_age_months;
 
--- ===============================
+
 -- LOAD engineered_customers.csv
--- ===============================
+
 
 COPY staging_engineered_features
 FROM '/data/engineered_customers.csv'
@@ -102,9 +100,9 @@ SELECT DISTINCT customer_id
 FROM staging_engineered_features
 ON CONFLICT DO NOTHING;
 
--- ===============================
+
 -- STAGING → engineered_features
--- ===============================
+
 
 INSERT INTO engineered_features(
     customer_id,
@@ -135,10 +133,8 @@ DO UPDATE SET
     risk_score = EXCLUDED.risk_score,
     risk_band = EXCLUDED.risk_band;
 
--- ===============================
--- OPTIONAL updated_at SAFE UPDATE
--- (only if column exists)
--- ===============================
+-- OPSİYONEL updated_at GÜVENLİ GÜNCELLEME
+-- (sadece sütun varsa)
 
 DO $$
 BEGIN
@@ -155,9 +151,9 @@ BEGIN
     END IF;
 END $$;
 
--- ===============================
+
 -- CLEAN STAGING
--- ===============================
+
 
 TRUNCATE staging_synthetic_customers;
 TRUNCATE staging_engineered_features;

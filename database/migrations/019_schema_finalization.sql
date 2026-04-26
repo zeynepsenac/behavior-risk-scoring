@@ -1,8 +1,8 @@
 BEGIN;
 
---------------------------------------------------
--- 0️⃣ SAFE RESET (VIEW / TABLE ambiguity fix)
---------------------------------------------------
+
+--  SAFE RESET (VIEW / TABLE ambiguity fix)
+
 
 -- engineered_customers_dataset (VIEW olabilir)
 DO $$
@@ -38,9 +38,9 @@ BEGIN
 END $$;
 
 
---------------------------------------------------
--- 1️⃣ FK FIX
---------------------------------------------------
+
+--  FK FIX
+
 
 ALTER TABLE IF EXISTS prediction_history
 DROP CONSTRAINT IF EXISTS fk_customer;
@@ -51,9 +51,9 @@ FOREIGN KEY (customer_id)
 REFERENCES customers(customer_id);
 
 
---------------------------------------------------
--- 2️⃣ FEATURE STORE REBUILD
---------------------------------------------------
+
+--  FEATURE STORE REBUILD
+
 
 DROP TABLE IF EXISTS engineered_features CASCADE;
 
@@ -80,7 +80,7 @@ BEGIN
 
     ELSE
 
-        -- ✅ BURASI ANA FIX
+        --  BURASI ANA FIX
         RAISE NOTICE 'engineered_customers_backup not found - empty feature store created';
 
         EXECUTE $SQL$
@@ -99,9 +99,9 @@ BEGIN
 END $$;
 
 
---------------------------------------------------
--- 3️⃣ DATA NORMALIZATION
---------------------------------------------------
+
+--  DATA NORMALIZATION
+
 
 UPDATE engineered_features
 SET risk_score =
@@ -120,9 +120,9 @@ SET risk_score = 0
 WHERE risk_score != risk_score;
 
 
---------------------------------------------------
--- 4️⃣ SEMANTIC VIEW
---------------------------------------------------
+
+--  SEMANTIC VIEW
+
 
 CREATE VIEW engineered_customers AS
 SELECT
@@ -139,9 +139,9 @@ JOIN engineered_features ef
 ON c.customer_id = ef.customer_id;
 
 
---------------------------------------------------
--- 5️⃣ INDEXES
---------------------------------------------------
+
+--  INDEXES
+
 
 CREATE INDEX IF NOT EXISTS idx_feat_risk_band
 ON engineered_features(risk_band);
@@ -153,9 +153,8 @@ CREATE INDEX IF NOT EXISTS idx_feat_risk_band_score
 ON engineered_features(risk_band, risk_score DESC);
 
 
---------------------------------------------------
--- 6️⃣ RISK CONSTRAINT
---------------------------------------------------
+--  RISK CONSTRAINT
+
 
 ALTER TABLE engineered_features
 DROP CONSTRAINT IF EXISTS chk_risk_score;
@@ -169,9 +168,8 @@ ALTER TABLE engineered_features
 VALIDATE CONSTRAINT chk_risk_score;
 
 
---------------------------------------------------
--- 7️⃣ DATASET VIEW
---------------------------------------------------
+--  DATASET VIEW
+
 
 CREATE OR REPLACE VIEW engineered_customers_dataset AS
 SELECT * FROM engineered_customers;

@@ -1,6 +1,5 @@
--- =====================================================
 -- ENGINEERED FEATURES TABLE
--- =====================================================
+
 
 CREATE TABLE IF NOT EXISTS engineered_features (
 
@@ -22,9 +21,9 @@ CREATE TABLE IF NOT EXISTS engineered_features (
     updated_at TIMESTAMP
 );
 
--- =====================================================
+
 -- INDEXES
--- =====================================================
+
 
 -- Risk band + score analytics index
 CREATE INDEX IF NOT EXISTS idx_risk_band_score

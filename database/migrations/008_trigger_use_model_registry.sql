@@ -1,6 +1,5 @@
--- ==========================================
 -- Update prediction trigger to use active model
--- ==========================================
+
 
 CREATE OR REPLACE FUNCTION log_prediction()
 RETURNS TRIGGER AS $$

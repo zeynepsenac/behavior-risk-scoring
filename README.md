@@ -1,94 +1,116 @@
-## Installation
+# 🧠 Behavior Risk Scoring System
 
-python -m venv venv
-source venv/bin/activate  # Windows için: .\venv\Scripts\Activate
-pip install -r requirements.txt
-## Synthetic Data
+![Project Banner](https://img.shields.io/badge/AI-Risk%20Scoring-blue?style=for-the-badge)
+![Docker](https://img.shields.io/badge/Docker-Containerized-blue?style=for-the-badge\&logo=docker)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green?style=for-the-badge\&logo=fastapi)
+![ML](https://img.shields.io/badge/Machine%20Learning-XGBoost-orange?style=for-the-badge)
 
-Synthetic data was generated using statistically controlled distributions
-to simulate realistic financial behavior patterns.
+---
 
-No real customer data was used in this project.
-All data is fully synthetic and compliant with KVKK and GDPR regulations.
+## 🚀 Proje Hakkında
 
+**Behavior Risk Scoring System**, kullanıcı davranış verilerini analiz ederek bireylerin risk seviyesini tahmin eden ve bu tahmini **açıklanabilir yapay zeka (LIME)** ile destekleyen uçtan uca bir veri bilimi ve backend sistemidir.
 
-Dataset is anonymized and contains no personally identifiable information (PII).
-KVKK/GDPR compliant processing is applied.
+Bu proje;
 
+* Veri işleme
+* Makine öğrenmesi
+* Veri gizliliği (KVKK / GDPR)
+* API geliştirme
+* Docker containerization
 
-Raw Data
-synthetic_customers.csv
-        │
-        │ Data Loading
-        ▼
-PostgreSQL
-customers (raw table)
-        │
-        │ Feature Engineering (Python)
-        ▼
-engineered_customers.csv
-        │
-        │ Database Loading
-        ▼
-PostgreSQL
-engineered_customers (processed table)
-        │
-        │ SQL Analytics
-        ▼
-Risk Analysis Queries
-        │
-        ▼
-Visualization / Reports
+bileşenlerini tek bir sistemde birleştirir.
 
+---
 
+## 🎯 Temel Amaç
 
-## Run Project
+Kullanıcı davranışlarını analiz ederek:
 
-```bash
-git clone REPO_LINK
-cd behavior-risk-scoring
-docker-compose up --build
+* 📊 Risk skorunu tahmin etmek
+* 🧠 Tahminlerin nedenlerini açıklamak
+* 🔐 Veriyi anonimleştirerek gizliliği korumak
+* ⚡ Gerçek zamanlı API üzerinden sonuç sunmak
+
+---
+
+## 🧱 Sistem Mimarisi
+
+```
+Synthetic Data
+      ↓
+Feature Engineering
+      ↓
+PostgreSQL Database
+      ↓
+ML Model Training
+      ↓
+Risk Prediction Engine
+      ↓
+LIME Explainability Layer
+      ↓
+FastAPI Service
+      ↓
+Reports & Visualization
 ```
 
-Open:
+---
+graph TD
 
-http://localhost:8000/docs
 
+## 📁 Proje Yapısı
 
-# Behavior Risk Scoring API
-
-A Dockerized FastAPI project that predicts customer behavioral risk scores using machine learning and explainable AI (LIME).
+```
+BEHAVIOR-RISK-SCORING/
+│
+├── data/            → Ham ve işlenmiş veriler
+├── models/          → ML modelleri ve scaler
+├── reports/         → Grafikler ve analiz çıktıları
+├── scripts/         → Veri işleme pipeline
+├── src/             → API + model + privacy layer
+├── sql/             → SQL sorguları
+├── docker/          → Container yapılandırmaları
+├── tests/           → Test scriptleri
+├── utils/           → Yardımcı fonksiyonlar
+```
 
 ---
 
-## 🚀 Project Overview
+## ⚙️ Özellikler
 
-This project provides:
+### 🧠 Machine Learning
 
-* Behavioral risk prediction API
-* PostgreSQL database
-* Automated schema creation
-* LIME explainability integration
-* Fully containerized environment using Docker
+* Risk skoru tahmini
+* Feature engineering pipeline
+* Model performans metrikleri
 
-No local Python or PostgreSQL installation is required.
+### 🔍 Explainable AI
+
+* LIME tabanlı açıklamalar
+* Karar nedenlerinin görselleştirilmesi
+
+### 🔐 Privacy Layer
+
+* K-Anonymity
+* L-Diversity
+* Veri anonimleştirme
+
+### 🐳 DevOps
+
+* Docker Compose desteği
+* PostgreSQL entegrasyonu
+* Otomatik schema migration
+
+### 🌐 API
+
+* FastAPI tabanlı REST API
+* Swagger UI desteği
 
 ---
 
-## 📦 Requirements
+## 🚀 Kurulum
 
-You only need:
-
-* Docker Desktop
-  https://www.docker.com/products/docker-desktop/
-
-Make sure Docker Desktop is **running** before starting.
-
----
-
-## ⚡ Quick Start (Recommended)
-
-### 1️⃣ Clone the repository
+### 📦 Clone
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/behavior-risk-scoring.git
@@ -97,74 +119,54 @@ cd behavior-risk-scoring
 
 ---
 
-### 2️⃣ Start the project
+### 🐳 Docker ile Çalıştır (Önerilen)
 
 ```bash
 docker compose up --build
 ```
 
-That’s it ✅
+---
 
-Docker will automatically:
+## 🌍 API Erişim
 
-* build the API image
-* start PostgreSQL
-* create database schema
-* run migrations
-* start FastAPI server
+| Servis     | URL                                                      |
+| ---------- | -------------------------------------------------------- |
+| Swagger UI | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| API Base   | [http://localhost:8000](http://localhost:8000)           |
 
 ---
 
-## 🌐 API Access
-
-After startup:
-
-Swagger Documentation:
+## 📊 Veri Akışı
 
 ```
-http://localhost:8000/docs
-```
-
-API Base URL:
-
-```
-http://localhost:8000
-```
-
----
-
-## 🗄️ Services
-
-| Service    | Port | Description |
-| ---------- | ---- | ----------- |
-| FastAPI    | 8000 | REST API    |
-| PostgreSQL | 5432 | Database    |
-
----
-
-## 🧱 Project Structure
-
-```
-behavior-risk-scoring/
-│
-├── src/
-│   ├── api.py
-│   ├── schemas.py
-│   └── explain/
-│       └── lime_explainer.py
-│
-├── database/
-│   └── migrations.sql
-│
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-└── README.md
+Raw Synthetic Data
+      ↓
+Anonymization Layer
+      ↓
+Feature Engineering
+      ↓
+Database Storage
+      ↓
+Model Prediction
+      ↓
+Explainability (LIME)
+      ↓
+Visualization & Reports
 ```
 
 ---
 
-## 🛑 Stop Containers
+## 📈 Model Performansı
+
+* Anlaşılabilirlik: 8.14 / 10
+* Kullanılabilirlik: 6.29 / 10
+* Model Güveni: 6.86 / 10
+* Karar Güveni: 8.43 / 10
+* Final AI Score: 6.59 / 10
+
+---
+
+## 🛑 Servisleri Durdurma
 
 ```bash
 docker compose down
@@ -172,7 +174,7 @@ docker compose down
 
 ---
 
-## 🔄 Reset Database (Optional)
+## 🔄 Sıfırlama
 
 ```bash
 docker compose down -v
@@ -181,6 +183,13 @@ docker compose up --build
 
 ---
 
-## 👩‍💻 Author
+## 👩‍💻 Geliştirici
 
-Software Engineering Project — Behavior Risk Scoring System
+**Software Engineering Project — Behavior Risk Scoring System**
+
+---
+
+## ⭐ Not
+
+Bu proje tamamen **sentetik veri** kullanır ve gerçek kullanıcı verisi içermez. KVKK & GDPR uyumludur.
+

@@ -1,255 +1,201 @@
-import { useState, useMemo } from "react";
-import { evaluateRule } from "../utils/ruleEngine";
+// 🧠 AI EXPLANATION COMPONENT (AIExplanation.jsx)
 
-export default function AIExplanation({ components, score, contributions, band }) {
+import { useMemo, useState } from "react";
 
-  const [simulatedScore, setSimulatedScore] = useState(null);
+export default function AIExplainabilityDashboard({ data }) {
+  const [selectedFeature, setSelectedFeature] = useState(null);
 
-  const getScoreColor = (s) => {
-    const safe = Number.isFinite(s) ? s : 0;
+  const fallbackData = {
+    predicted_risk_score: null,
+    predicted_band: null,
+    model_confidence: null,
+    payment_discipline_score: null,
+    income_stability_index: null,
+    financial_resilience_score: null,
+    warnings: []
+  };
 
-    if (safe < 0.01) return "#16a34a";
-    if (safe < 0.03) return "#f59e0b";
-    return "#dc2626";
+  const safeData =
+    data && Object.keys(data).length > 0 ? data : fallbackData;
+
+  const THRESHOLDS = {
+    LOW: 50,
+    MEDIUM: 70,
+    HIGH: 85
+  };
+
+  const normalize = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    if (n >= 0 && n <= 1) return n;
+    if (n > 1 && n <= 100) return n / 100;
+    return (n % 100) / 100;
+  };
+
+  const getLevel = (value) => {
+    if (value === null) return "unknown";
+    if (value < THRESHOLDS.LOW / 100) return "low";
+    if (value < THRESHOLDS.MEDIUM / 100) return "medium";
+    if (value < THRESHOLDS.HIGH / 100) return "high";
+    return "very_high";
   };
 
   const analysis = useMemo(() => {
-
-    if (!components) {
-      return { text: "Veri bulunamadı.", actions: [], factors: [] };
-    }
-
-    const actionList = [];
-    const factorComments = [];
-
-    // =====================================================
-    // 🔥 BAND FIX (CRITICAL PATCH)
-    // =====================================================
-    const safeBandRaw = band ?? "MEDIUM";
-
-    const safeBand = safeBandRaw
-      .toString()
-      .trim()
-      .toUpperCase();
-
-    // 🔥 HARD GUARD (BUG FIX)
-    const allowedBands = ["LOW", "MEDIUM", "HIGH"];
-    const finalBand = allowedBands.includes(safeBand) ? safeBand : "MEDIUM";
-
-    const isLowRisk = finalBand === "LOW";
-
-    // =====================================================
-    // 🔥 MODEL EXPLAINABILITY (UNCHANGED)
-    // =====================================================
-    if (contributions && contributions.length > 0) {
-
-      const sorted = contributions
-        .filter((item) => Number.isFinite(item?.impact))
-        .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
-
-      if (sorted.length > 0) {
-        const top = sorted[0];
-
-        const factorNameMap = {
-          payment_discipline_score: "Ödeme Disiplini",
-          income_stability_index: "Gelir İstikrarı",
-          financial_resilience_score: "Finansal Dayanıklılık"
-        };
-
-        const mainReason = factorNameMap[top.feature] || top.feature;
-
-        const impactPercent = Math.min(
-          100,
-          Math.abs(Number(top.impact) || 0) * 100
-        );
-
-        actionList.push(
-          `📊 Model analizi: ${mainReason} faktörü riski %${impactPercent.toFixed(2)} oranında etkilemektedir.`
-        );
-      }
-
-    } else {
-
-      actionList.push("📊 Model açıklaması yerine kural bazlı analiz kullanıldı.");
-
-      if (components.payment_discipline_score < 0.5) {
-        actionList.push("Ödeme disiplini düşük olduğu için risk artmaktadır.");
-      }
-
-      if (components.income_stability_index < 0.5) {
-        actionList.push("Gelir istikrarı düşük olduğu için risk artmaktadır.");
-      }
-
-      if (components.financial_resilience_score < 0.5) {
-        actionList.push("Finansal dayanıklılık zayıf olduğu için risk artmaktadır.");
-      }
-    }
-
-    // =====================================================
-    // 🔥 RULE ENGINE (UNCHANGED)
-    // =====================================================
-    const mapping = [
+    const features = [
       {
-        key: "financial_resilience",
-        value: components?.financial_resilience_score
-      },
-      {
+        name: "Payment Discipline",
         key: "payment_discipline",
-        value: components?.payment_discipline_score
+        raw: safeData.payment_discipline_score,
+        value: normalize(safeData.payment_discipline_score)
       },
       {
+        name: "Income Stability",
         key: "income_stability",
-        value: components?.income_stability_index
+        raw: safeData.income_stability_index,
+        value: normalize(safeData.income_stability_index)
+      },
+      {
+        name: "Financial Resilience",
+        key: "financial_resilience",
+        raw: safeData.financial_resilience_score,
+        value: normalize(safeData.financial_resilience_score)
       }
     ];
 
-    mapping.forEach((item) => {
-
-      if (item.value === null || item.value === undefined) return;
-
-      const rule = evaluateRule(item.key, item.value);
-      if (!rule) return;
-
-      if (rule.description && !isLowRisk) {
-        factorComments.push(rule.description);
-      }
-
-      if (rule.action) {
-        actionList.push({
-          text: rule.action,
-          priority: rule.priority,
-          impact: Number(rule.impact) || 0,
-          color: rule.color
-        });
-      }
-    });
-
-    // =====================================================
-    // 🔥 EXECUTIVE SUMMARY (100% SAFE)
-    // =====================================================
-    const summaryMap = {
-      LOW: "Müşteri düşük risk grubundadır; mevcut finansal davranışlar genel olarak stabildir.",
-      MEDIUM: "Müşteri orta risk grubundadır; bazı finansal göstergelerde iyileştirme gerekmektedir.",
-      HIGH: "Müşteri yüksek risk grubundadır; finansal davranışlarda kritik iyileştirmeler gereklidir."
-    };
-
-    const summary =
-      summaryMap[finalBand] ?? summaryMap.MEDIUM;
-
     return {
-      text: summary + " (Kural bazlı analiz ile desteklenmiştir.)",
-      actions: actionList,
-      factors: factorComments
+      score: normalize(safeData.predicted_risk_score),
+      band: safeData.predicted_band ?? "MEDIUM",
+      confidence: normalize(safeData.model_confidence),
+      features
     };
+  }, [safeData]);
 
-  }, [components, score, contributions, band]);
-
-  const { text, actions, factors } = analysis;
-
-  const simulateImpact = () => {
-
-    if (!actions?.length) return;
-
-    const totalImpact = actions.reduce(
-      (sum, a) => sum + (Number(a?.impact) || 0),
-      0
-    );
-
-    const safeScore = Number.isFinite(score) ? score : 0;
-
-    const newScore = Math.max(
-      0,
-      safeScore - Math.abs(totalImpact) * 0.01
-    );
-
-    setSimulatedScore(newScore);
+  const getColor = (v) => {
+    if (v === null) return "#6b7280";
+    if (v < 0.15) return "#16a34a";
+    if (v < 0.35) return "#f59e0b";
+    return "#ef4444";
   };
 
+  const getBand = (b) => {
+    const map = {
+      HIGH: "High risk exposure",
+      MEDIUM: "Moderate risk exposure",
+      LOW: "Low risk exposure"
+    };
+    return map[b] ?? "Moderate risk exposure";
+  };
+
+  const explain = (f) => {
+    if (f.value === null) return "Veri eksik";
+
+    const level = getLevel(f.value);
+
+    if (f.key === "financial_resilience") {
+      if (f.value < 0.2) return "KRİTİK: Finansal dayanıklılık çok zayıf";
+      if (level === "low") return "Zayıf finansal dayanıklılık";
+      if (level === "medium") return "Orta finansal dayanıklılık";
+      return "Güçlü finansal dayanıklılık";
+    }
+
+    if (f.key === "payment_discipline") {
+      if (level === "low") return "Zayıf ödeme disiplini → risk artırır";
+      if (level === "medium") return "Orta ödeme disiplini";
+      return "Güçlü ödeme disiplini → koruyucu faktör";
+    }
+
+    if (f.key === "income_stability") {
+      if (f.value < 0.5) return "Gelir dalgalı → risk artar";
+      if (f.value < 0.7) return "Orta gelir istikrarı";
+      return "Stabil gelir yapısı → risk azaltır";
+    }
+
+    return "Nötr";
+  };
+
+  const score = analysis.score;
+  const confidence = analysis.confidence;
+
+  const aiExplanation = (() => {
+    const resilience = safeData.financial_resilience_score;
+    const conf = normalize(safeData.model_confidence);
+
+    if (conf !== null && conf < 0.6) {
+      return "Model düşük güven seviyesine sahiptir. Sonuçlar dikkatle değerlendirilmelidir.";
+    }
+
+    if (conf !== null && conf < 0.85) {
+      if (resilience !== null && resilience < 40) {
+        return "Model düşük risk tahmini üretmekle birlikte finansal dayanıklılık zayıf olduğu için kırılganlık riski vardır.";
+      }
+      return "Model düşük-orta güvenle risk tahmini üretmektedir, bazı değişkenler dikkat gerektirir.";
+    }
+
+    if (resilience !== null && resilience < 40) {
+      return "Risk düşük görünse de finansal dayanıklılık zayıf olduğu için kırılganlık riski vardır.";
+    }
+
+    return "Model finansal davranışları analiz ederek güvenilir düşük risk seviyesi belirlemiştir.";
+  })();
+
   return (
-    <div className="card">
-      <h3>🧠 AI Açıklama</h3>
+    <div className="grid xl:grid-cols-3 gap-6 p-6 bg-gray-50">
 
-      <p style={{ lineHeight: "1.7", marginBottom: "16px" }}>
-        {text}
-      </p>
-
-      {factors.length > 0 && (
-        <div style={{ marginBottom: "16px", fontSize: "14px", color: "#6b7280" }}>
-          {factors.map((f, i) => (
-            <div key={i}>• {f}</div>
-          ))}
+      {/* SCORE */}
+      <div className="bg-white p-6 rounded-2xl shadow-md">
+        <div className="text-sm font-semibold text-gray-700">
+          Risk Skoru
         </div>
-      )}
 
-      {actions.length > 0 && (
-        <div>
-          <h4>📌 Önerilen Aksiyonlar</h4>
+        <div
+          className="text-5xl font-bold mt-3"
+          style={{ color: getColor(score) }}
+        >
+          {score === null ? "N/A" : score.toFixed(3)}
+        </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {actions.map((a, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: "10px",
-                  borderRadius: "8px",
-                  background: "#f9fafb",
-                  borderLeft: `5px solid ${a.color}`,
-                  display: "flex",
-                  justifyContent: "space-between"
-                }}
-              >
-                <span>{a.text}</span>
-                <span style={{ fontWeight: "bold", color: a.color }}>
-                  {a.priority}
-                </span>
-              </div>
-            ))}
+        <div className="text-base font-medium text-gray-800 mt-2">
+          {getBand(analysis.band)}
+        </div>
+
+        <div className="text-sm text-gray-700 mt-1">
+          Güven: {confidence === null ? "N/A" : (confidence * 100).toFixed(1) + "%"}
+        </div>
+      </div>
+
+      {/* FEATURES */}
+      <div className="bg-white p-6 rounded-2xl space-y-4 shadow-md">
+        {analysis.features.map((f, i) => (
+          <div key={i} className="p-4 border rounded-xl hover:bg-gray-50 transition">
+
+            <div className="text-base font-semibold text-gray-900">
+              {f.name}
+            </div>
+
+            <div className="text-sm text-gray-700 mt-1">
+              Değer: {f.raw == null ? "Veri yok" : f.raw}
+            </div>
+
+            <div className="text-base font-medium text-gray-900 mt-2 leading-relaxed">
+              {explain(f)}
+            </div>
+
           </div>
+        ))}
+      </div>
 
-          <button
-            onClick={simulateImpact}
-            style={{
-              marginTop: "12px",
-              padding: "10px 14px",
-              background: "#111827",
-              color: "white",
-              borderRadius: "10px",
-              fontWeight: "600",
-              cursor: "pointer"
-            }}
-          >
-            🎯 Etkiyi Simüle Et
-          </button>
+      {/* INFO */}
+      <div className="bg-white p-6 rounded-2xl shadow-md">
+        <div className="text-lg font-bold text-gray-900 mb-3">
+          🟢AI Açıklama
         </div>
-      )}
 
-      {simulatedScore !== null && (
-        <div style={{ marginTop: "20px" }}>
-          <strong>Skor Değişimi:</strong>
-
-          <div style={{
-            marginTop: "10px",
-            padding: "12px",
-            borderRadius: "10px",
-            background: "#f3f4f6",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            fontSize: "18px",
-            fontWeight: "600"
-          }}>
-            <span style={{ color: getScoreColor(score) }}>
-              {(Number(score) || 0).toFixed(6)}
-            </span>
-
-            ➡️
-
-            <span style={{ color: getScoreColor(simulatedScore) }}>
-              {simulatedScore.toFixed(6)}
-            </span>
-          </div>
+        {/* 🔥 FULL DARK FIX */}
+        <div className="text-base font-medium text-gray-900 leading-relaxed">
+          {aiExplanation}
         </div>
-      )}
+      </div>
+
     </div>
   );
 }

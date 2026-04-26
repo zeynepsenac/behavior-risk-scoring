@@ -1,21 +1,16 @@
-# =====================================================
-# IMPORTS
-# =====================================================
 from sqlalchemy import create_engine, text
 import pandas as pd
 import psycopg2
 import os
 import socket
-import numpy as np   # ✅ normalization
+import numpy as np   
 
-# ✅ CENTRAL CONFIG
 from src.config.settings import DATABASE_TABLES
 
 
-# =====================================================
-# DATABASE HOST AUTO DETECT
-# =====================================================
-
+# =========================
+# DB HOST AUTO DETECT
+# =========================
 def detect_db_host():
 
     env_host = os.getenv("DB_HOST")
@@ -39,10 +34,9 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 print(f"Using DB host: {DB_HOST}")
 
 
-# =====================================================
+# =========================
 # CONNECTION STRING
-# =====================================================
-
+# =========================
 DATABASE_URL = (
     f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}"
     f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
@@ -56,17 +50,12 @@ postgres_engine = create_engine(
 )
 
 
-# =====================================================
-# DEFAULT TABLE
-# =====================================================
-
 DEFAULT_ENGINEERED_TABLE = DATABASE_TABLES["ENGINEERED"]
 
 
-# =====================================================
+# =========================
 # RAW CONNECTION
-# =====================================================
-
+# =========================
 def get_db_connection():
     return psycopg2.connect(
         host=DB_HOST,
@@ -77,15 +66,10 @@ def get_db_connection():
     )
 
 
-# =====================================================
-# ✅ TABLE EXISTENCE SAFETY CHECK (NEW)
-# =====================================================
-
+# =========================
+# TABLE CHECK
+# =========================
 def verify_table_exists(conn, table_name: str):
-    """
-    Production safety:
-    Prevents silent failures caused by wrong table names.
-    """
 
     with conn.cursor() as cur:
         cur.execute("""
@@ -101,31 +85,61 @@ def verify_table_exists(conn, table_name: str):
         raise RuntimeError(f"Table not found: {table_name}")
 
 
-# =====================================================
-# DATA LOADERS
-# =====================================================
-
+# =========================
+# DATA LOADER (FIXED + SAFE ML VERSION)
+# =========================
 def load_customers_postgres(table_name: str = DEFAULT_ENGINEERED_TABLE):
 
-    # ✅ SAFETY CHECK (automatic)
     conn = get_db_connection()
     try:
         verify_table_exists(conn, table_name)
     finally:
         conn.close()
 
-    query = f"SELECT * FROM {table_name}"
-    return pd.read_sql(query, postgres_engine)
+    query = f"""
+        SELECT 
+            customer_id,
+            payment_discipline_score,
+            income_stability_index,
+            financial_resilience_score
+        FROM {table_name}
+    """
+
+    df = pd.read_sql(query, postgres_engine)
+
+    # =========================
+    # 🔥 ML SAFETY LAYER (IMPROVED)
+    # =========================
+
+    feature_cols = [
+        "payment_discipline_score",
+        "income_stability_index",
+        "financial_resilience_score"
+    ]
+
+    # ❗ FIX 1: inf -> NaN
+    df[feature_cols] = df[feature_cols].replace([np.inf, -np.inf], np.nan)
+
+    # ❗ FIX 2: smarter imputation (median instead of 0 bias)
+    df[feature_cols] = df[feature_cols].fillna(df[feature_cols].median())
+
+    # ❗ FIX 3: type safety
+    df[feature_cols] = df[feature_cols].astype(float)
+
+    # ❗ FIX 4: hard lower bound (no negative ML noise)
+    for col in feature_cols:
+        df[col] = df[col].clip(lower=0, upper=100)
+
+    return df
 
 
 def load_customers(table_name: str = DEFAULT_ENGINEERED_TABLE):
     return load_customers_postgres(table_name)
 
 
-# =====================================================
-# SCHEMA VALIDATION
-# =====================================================
-
+# =========================
+# SCHEMA CHECK (UNCHANGED)
+# =========================
 REQUIRED_COLUMNS = {
     "risk_score",
     "model_version",
@@ -157,21 +171,16 @@ def verify_schema(conn):
         )
 
 
-# =====================================================
+# =========================
 # SCORE NORMALIZATION
-# =====================================================
-
+# =========================
 def normalize_risk_score(score: float) -> float:
-    """
-    Convert raw model output into probability (0-1).
-    """
     return float(1 / (1 + np.exp(-score)))
 
 
-# =====================================================
-# SAVE PREDICTIONS
-# =====================================================
-
+# =========================
+# SAVE PREDICTIONS (IMPROVED SAFETY)
+# =========================
 def save_predictions_to_db(df):
 
     print("Saving predictions to database...")
@@ -219,11 +228,8 @@ def save_predictions_to_db(df):
             [
                 {
                     "customer_id": int(row["customer_id"]),
-                    "risk_score": normalize_risk_score(
-                        float(row["risk_score"])
-                    ),
+                    "risk_score": normalize_risk_score(float(row["risk_score"])),
                     "original_band": row["original_band"],
-                
                     "predicted_band": row["predicted_band"],
                     "model_version": row.get("model_version", "offline"),
                     "feature_version": row.get("feature_version", "v1"),
@@ -233,4 +239,4 @@ def save_predictions_to_db(df):
             ]
         )
 
-    print("✓ Predictions saved to DB.")
+    print("Predictions saved to DB.")

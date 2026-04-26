@@ -1,15 +1,15 @@
-from pydantic import BaseModel
-from typing import List, Optional, Dict
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
 
 
 # =====================================================
-# LABEL COMPARISON (ENTERPRISE AUDIT MODEL)
+# LABEL COMPARISON
 # =====================================================
 
 class LabelComparison(BaseModel):
     original_band: Optional[str] = None
-    predicted_band: str
-    agreement: bool
+    predicted_band: Optional[str] = None
+    agreement: Optional[bool] = None
 
 
 # =====================================================
@@ -17,13 +17,13 @@ class LabelComparison(BaseModel):
 # =====================================================
 
 class RiskComponents(BaseModel):
-    payment_discipline_score: float
-    income_stability_index: float
-    financial_resilience_score: float
+    payment_discipline_score: Optional[float] = None
+    income_stability_index: Optional[float] = None
+    financial_resilience_score: Optional[float] = None
 
 
 # =====================================================
-# FEATURE CONTRIBUTION MODEL (EXPLAINABILITY)
+# FEATURE CONTRIBUTION
 # =====================================================
 
 class FeatureContribution(BaseModel):
@@ -32,7 +32,18 @@ class FeatureContribution(BaseModel):
 
 
 # =====================================================
-# RULE-BASED EXPLAINABILITY MODEL
+# 🔥 FIX: FULL EXPLANATION MODEL (API İLE UYUMLU)
+# =====================================================
+
+class FeatureExplanation(BaseModel):
+    feature: str
+    value: Optional[float] = None
+    impact: float
+    text: Optional[str] = None
+
+
+# =====================================================
+# RULE ITEM
 # =====================================================
 
 class RuleItem(BaseModel):
@@ -45,55 +56,63 @@ class RuleItem(BaseModel):
 # =====================================================
 
 class ModelInfo(BaseModel):
-    model_version: str
-    model_hash: str
+    model_version: Optional[str] = None
+    model_hash: Optional[str] = None
 
 
 # =====================================================
-# MAIN RISK RESPONSE (🔥 FINAL CLEAN VERSION)
+# MAIN RESPONSE (FIXED)
 # =====================================================
 
 class RiskResponse(BaseModel):
     customer_id: int
 
-    # 🔹 mevcut alanlar (DEĞİŞMEDİ)
-    original_risk_score: float
-    predicted_risk_score: float
-    risk_band: str
-    risk_color: str
-    risk_label: str
+    original_risk_score: Optional[float] = None
+    predicted_risk_score: Optional[float] = None
+    risk_band: Optional[str] = None
+    risk_color: Optional[str] = None
+    risk_label: Optional[str] = None
 
-    components: RiskComponents
-    label_comparison: LabelComparison
+    components: Optional[RiskComponents] = None
+    label_comparison: Optional[LabelComparison] = None
 
-    # 🔥 LIME KALDIRILDI → YENİ ALAN
-    explanations: Optional[List[FeatureContribution]] = None
+    # 🔥 FIX: mutable default kaldırıldı
+    feature_contributions: Optional[List[FeatureContribution]] = Field(default_factory=list)
+
+    feature_importance: Optional[Dict[str, float]] = Field(default_factory=dict)
+
+    # 🔥 FIX: doğru model kullanıldı
+    explanations: Optional[List[FeatureExplanation]] = Field(default_factory=list)
+
+    rule_explanations: Optional[List[RuleItem]] = Field(default_factory=list)
 
     rule_based_score: Optional[float] = None
-    rule_explanations: Optional[List[RuleItem]] = None
 
     model_info: Optional[ModelInfo] = None
-    score_metadata: Optional[Dict[str, str]] = None
-
-    # =====================================================
-    # 🔥 EK ALANLAR (DEĞİŞMEDİ)
-    # =====================================================
+    score_metadata: Optional[Dict[str, Any]] = None
 
     ml_score: Optional[float] = None
     rule_score: Optional[float] = None
     final_score: Optional[float] = None
     base_value: Optional[float] = None
 
+    model_confidence: Optional[float] = None
+
+    # 🔥 FIX: mutable default kaldırıldı
+    warnings: Optional[List[str]] = Field(default_factory=list)
+
 
 # =====================================================
-# SIMPLE RESPONSE
+# SIMPLE RESPONSE (UNCHANGED + SAFE)
 # =====================================================
 
 class SimpleRiskResponse(BaseModel):
     risk_score: float
     risk_band: str
     risk_label: str
-    confidence: str
+
+    confidence: Optional[float] = None
+    warning: Optional[str] = None
 
 
 # =====================================================
@@ -104,14 +123,14 @@ class ExplainResponse(BaseModel):
     customer_id: int
     risk_score: float
 
-    risk_segment: str
-    risk_color: str
-    risk_label: str
+    risk_segment: Optional[str] = None
+    risk_color: Optional[str] = None
+    risk_label: Optional[str] = None
 
-    feature_contributions: List[FeatureContribution]
-    top_risk_factors: List[FeatureContribution]
+    feature_contributions: List[FeatureContribution] = Field(default_factory=list)
+    top_risk_factors: List[FeatureContribution] = Field(default_factory=list)
 
-    natural_language_explanation: str
+    natural_language_explanation: Optional[str] = None
 
 
 # =====================================================

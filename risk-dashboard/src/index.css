@@ -1,131 +1,202 @@
-/* ===================================== */
-/* 🌍 GLOBAL */
-/* ===================================== */
+
+/* GLOBAL */
 
 body {
   margin: 0;
   font-family: "Inter", sans-serif;
   background: #f9fafb;
+  overflow: hidden;
+
+  color: #111827;
 }
 
 /* root container */
 #root {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 16px;
+
+  height: 100vh;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
 }
 
-/* ===================================== */
-/* 📊 DASHBOARD GRID (EKLENDİ) */
-/* ===================================== */
+/* DASHBOARD GRID */
 
 .dashboard-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-  align-items: stretch;
+
+  grid-template-columns: repeat(3, 1fr);
+
+  grid-template-areas:
+    "score gauge ai"
+    "rules rules rules";
+
+  gap: 16px;
+
+  height: calc(100vh - 180px);
+
+  overflow: hidden;
 }
 
-/* ===================================== */
-/* 🧾 CARD DESIGN (EKLENDİ) */
-/* ===================================== */
+/* GRID AREA MAPPING */
+
+.score-card {
+  grid-area: score;
+}
+
+.gauge-card {
+  grid-area: gauge;
+}
+
+.ai-card {
+  grid-area: ai;
+}
+
+/* FIX: RULES CARD */
+
+.rules-card {
+  grid-area: rules;
+
+  width: 100%;
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 10px;
+}
+
+/* CARD DESIGN */
 
 .card {
   background: white;
-  padding: 20px;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 16px;
+  border-radius: 14px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  justify-content: flex-start;
+
+  overflow: hidden;
+
+  color: #111827;
 }
 
-/* ===================================== */
-/* 🔥 GAUGE CONTROL (EN KRİTİK FIX) */
-/* ===================================== */
+/* AI SCROLL */
+
+.ai-card {
+  overflow-y: auto;
+}
+
+/* 🔥 AÇIKLAMA YEŞİL (BURASI EKLENDİ) */
+.ai-card p,
+.ai-explanation {
+  color: #16a34a;
+}
+
+/* RULES FULL WIDTH CHILD FIX */
+
+.rules-card > * {
+  width: 100%;
+}
+
+/* GAUGE */
 
 .card canvas {
-  max-height: 250px !important;
+  max-height: 200px !important;
 }
 
-/* ===================================== */
-/* 🔠 TEXT SCALE (EKLENDİ) */
-/* ===================================== */
+/* TEXT */
 
 h1 {
-  font-size: 36px;
+  font-size: 32px;
   margin: 0;
 }
 
 h2 {
-  font-size: 20px;
-  margin-bottom: 10px;
+  font-size: 18px;
+  margin-bottom: 8px;
 }
 
 h3 {
-  font-size: 16px;
+  font-size: 15px;
 }
 
-/* ===================================== */
-/* 🎛️ INPUT & BUTTON */
-/* ===================================== */
+/* INPUT & BUTTON */
 
 input {
-  padding: 8px;
+  padding: 6px;
   border-radius: 8px;
   border: 1px solid #ccc;
+
+  color: #111827;
 }
 
 button {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 8px;
   border: none;
   background: #111827;
   color: white;
   cursor: pointer;
-  margin-right: 10px;
+  margin-right: 8px;
+  font-size: 13px;
 }
 
 button:hover {
   background: #1f2937;
 }
 
-/* ===================================== */
-/* 📱 MOBILE RESPONSIVE (SENİN KODUN + FIX) */
-/* ===================================== */
+/* ACTION LIST */
+
+.action-item {
+  display: flex;
+  justify-content: space-between;
+  border-left: 4px solid red;
+  padding-left: 10px;
+  margin-bottom: 10px;
+}
+
+/* MOBILE */
 
 @media (max-width: 768px) {
-
-  /* container daralt */
-  #root {
-    padding: 12px;
-    border: none;
+  body {
+    overflow: auto;
   }
 
-  /* başlık küçült */
+  #root {
+    padding: 12px;
+    height: auto;
+  }
+
   h1 {
-    font-size: 28px;
+    font-size: 26px;
     text-align: center;
   }
 
-  h2 {
-    font-size: 18px;
-  }
-
-  h3 {
-    font-size: 16px;
-  }
-
-  /* grid → tek kolon */
   .dashboard-container {
     grid-template-columns: 1fr !important;
-    gap: 16px;
+
+    grid-template-areas:
+      "score"
+      "gauge"
+      "ai"
+      "rules";
+
+    gap: 14px;
+    height: auto;
   }
 
-  /* kart padding azalt */
   .card {
-    padding: 16px;
-    border-radius: 14px;
+    padding: 14px;
   }
 
-  /* input + button full width */
   input {
     width: 100%;
     margin-bottom: 10px;
@@ -135,4 +206,6 @@ button:hover {
     width: 100%;
     margin-top: 8px;
   }
+
+  /* ❌ BUNU SİLDİM (HER ŞEYİ EZİYORDU) */
 }

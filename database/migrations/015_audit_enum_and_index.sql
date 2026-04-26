@@ -1,9 +1,9 @@
 DROP VIEW IF EXISTS engineered_customers_dataset;
 
 
--- ==================================================
+
 -- 1. AUDIT COLUMN
--- ==================================================
+
 
 ALTER TABLE prediction_history
 ADD COLUMN IF NOT EXISTS created_by TEXT DEFAULT current_user;
@@ -19,9 +19,8 @@ ALTER COLUMN created_by SET NOT NULL;
 
 
 
--- ==================================================
 -- 3. ENUM CONVERSION
--- ==================================================
+
 
 DO $$
 BEGIN
@@ -56,17 +55,15 @@ ALTER TABLE engineered_features
 ALTER COLUMN risk_band SET NOT NULL;
 
 
--- ==================================================
 -- 4. ANALYTICS INDEX
--- ==================================================
+
 
 CREATE INDEX IF NOT EXISTS idx_prediction_model_time
 ON prediction_history(model_version, prediction_time DESC);
 
 
--- ==================================================
 -- 5. RECREATE VIEW
--- ==================================================
+
 
 CREATE VIEW engineered_customers_dataset AS
 SELECT

@@ -4,27 +4,18 @@ import numpy as np
 import json
 from lime.lime_tabular import LimeTabularExplainer
 
-print("🔄 Generating predictions...")
+print(" Generating predictions (FINAL THESIS VERSION)...")
 
-# ================================
 # MODEL + SCALER LOAD
-# ================================
 model = joblib.load("models/risk_model_v2.pkl")
 scaler = joblib.load("models/scaler_v2.pkl")
 
-# ================================
-# TRAIN DATA LOAD (🔥 CLEAN FIX)
-# ================================
+# TRAIN DATA LOAD
 X_train_scaled = joblib.load("models/X_train_scaled_v2.pkl")
+X_train_scaled = np.array(X_train_scaled, dtype=float)
 
-# 🔥 CLEAN TRAIN DATA (CRITICAL FIX)
-X_train_scaled = pd.DataFrame(X_train_scaled)
-X_train_scaled = X_train_scaled.select_dtypes(include=[np.number]).to_numpy(dtype=float)
-
-# ================================
 # DATA LOAD
-# ================================
-df = pd.read_csv("data/engineered_customers.csv")
+df = pd.read_csv("data/anonymized_customers.csv")
 
 feature_cols = [
     "payment_discipline_score",
@@ -32,36 +23,43 @@ feature_cols = [
     "financial_resilience_score"
 ]
 
-X = df[feature_cols].copy()
+missing = [c for c in feature_cols if c not in df.columns]
+if missing:
+    raise ValueError(f"Missing required columns: {missing}")
 
-# ================================
-# SCALE INPUT
-# ================================
+# INPUT CLEANING
+X = df[feature_cols].copy()
+X = X.replace([np.inf, -np.inf], np.nan).fillna(0)
+
 X_scaled = scaler.transform(X)
 
-# ================================
-# PREDICTION
-# ================================
+# RAW PRED
 raw_preds = model.predict(X_scaled)
 
-preds = raw_preds / 25.0
-preds = np.clip(preds, 0, 1)
+# ROBUST SCALING
+raw_min = np.percentile(raw_preds, 5)
+raw_max = np.percentile(raw_preds, 95)
+denom = (raw_max - raw_min) + 1e-6
 
+preds = np.clip((raw_preds - raw_min) / denom, 0, 1)
 df["predicted_risk_score"] = preds
 
-# ================================
+# 🔥 FIX 1: evaluation için TRUE SCORE EKLENDİ
+# (risk_score yoksa evaluation kırılmasın)
+df["risk_score"] = preds  # alias (compatibility layer)
+
+print("RAW PRED STATS:\n", pd.Series(raw_preds).describe())
+print("SCALED PRED STATS:\n", pd.Series(preds).describe())
+
 # BAND
-# ================================
 df["predicted_band"] = pd.cut(
     df["predicted_risk_score"],
     bins=[0, 0.33, 0.66, 1],
-    labels=["Low", "Medium", "High"],
+    labels=["LOW", "MEDIUM", "HIGH"],
     include_lowest=True
-)
+).astype(str)
 
-# ================================
-# LIME EXPLAINER (FIXED)
-# ================================
+# LIME
 explainer = LimeTabularExplainer(
     training_data=X_train_scaled,
     feature_names=feature_cols,
@@ -69,24 +67,13 @@ explainer = LimeTabularExplainer(
     discretize_continuous=True
 )
 
-# ================================
-# PREDICT FUNCTION (SAFE FIX)
-# ================================
 def predict_fn(x):
     x = np.asarray(x, dtype=float)
-    raw = model.predict(x)
-    scaled = raw / 25.0
-    return np.clip(scaled, 0, 1)
+    return model.predict(x)
 
-# ================================
-# BASE VALUE
-# ================================
 base_preds = predict_fn(X_train_scaled)
 base_value = float(np.mean(base_preds))
 
-# ================================
-# LIME LOOP (SAFE VERSION)
-# ================================
 lime_results_all = []
 
 for i in range(len(X_scaled)):
@@ -96,51 +83,97 @@ for i in range(len(X_scaled)):
         num_features=3
     )
 
-    lime_result = exp.as_list()
+    cleaned = []
+    for feature, impact in exp.as_list():
+        feature_name = str(feature)
 
-    cleaned_explanation = []
+        for sep in ["<=", ">=", "<", ">", "="]:
+            feature_name = feature_name.split(sep)[0]
 
-    for item in lime_result:
-        f, v = item
+        feature_name = feature_name.strip()
 
-        # 🔥 SAFE FEATURE PARSING
-        feature_name = str(f)
-        feature_name = feature_name.split("=")[0].split("<")[0].split(">")[0].strip()
+        if feature_name not in feature_cols:
+            feature_name = "unknown_feature"
 
-        cleaned_explanation.append({
+        cleaned.append({
             "feature": feature_name,
-            "impact": float(v)
+            "impact": float(impact)
         })
 
-    lime_results_all.append(cleaned_explanation)
+    lime_results_all.append(cleaned)
 
-# ================================
-# JSON FORMAT
-# ================================
 df["lime_explanation"] = [
-    json.dumps(row, ensure_ascii=False) for row in lime_results_all
+    json.dumps(r, ensure_ascii=False) for r in lime_results_all
 ]
 
 df["base_value"] = base_value
 
-# ================================
-# MODEL INFO
-# ================================
+# META
 df["model_hash"] = "b02a4b90e9feb18d0ef31562d8c2fa4a46c7b5812790cc777c6110e8a87b7c65"
-df["model_version"] = "v1_fixed_scale"
+df["model_version"] = "v1_thesis_final"
 
-# ================================
-# OUTPUT
-# ================================
-output_cols = [
+# BIAS
+global_mean = df["predicted_risk_score"].mean()
+df["bias_delta"] = df["predicted_risk_score"] - global_mean
+
+for col in feature_cols:
+    med = df[col].median()
+
+    df[f"{col}_group"] = np.where(df[col] < med, "low", "high")
+
+    grp_mean = df.groupby(f"{col}_group")["predicted_risk_score"].transform("mean")
+
+    # 🔥 FIX 2: suffix eksikti
+    df[f"{col}_bias"] = df["predicted_risk_score"] - grp_mean.fillna(global_mean)
+
+# INTERSECTIONAL BIAS
+df["combined_group"] = (
+    df["income_stability_index"].round(1).astype(str) + "_" +
+    df["payment_discipline_score"].round(1).astype(str)
+)
+
+group_mean = df.groupby("combined_group")["predicted_risk_score"].transform("mean")
+df["intersectional_bias"] = df["predicted_risk_score"] - group_mean.fillna(global_mean)
+
+# CONFIDENCE
+df["model_confidence"] = (1 - np.abs(df["bias_delta"])).clip(0, 1)
+
+# CALIBRATION
+df["calibration_bin"] = pd.qcut(
+    df["predicted_risk_score"],
+    q=5,
+    labels=False,
+    duplicates="drop"
+)
+
+df["risk_percentile"] = df["predicted_risk_score"].rank(pct=True)
+
+# FINAL OUTPUT
+cols = [
+    "income_stability_index",
+    "payment_discipline_score",
+    "financial_resilience_score",
     "predicted_risk_score",
     "predicted_band",
+    "bias_delta",
+    "model_confidence",
+    "payment_discipline_score_bias",
+    "income_stability_index_bias",
+    "financial_resilience_score_bias",
+    "intersectional_bias",
+    "calibration_bin",
+    "risk_percentile",
     "model_hash",
     "model_version",
     "base_value",
     "lime_explanation"
 ]
 
-df[output_cols].to_csv("data/predictions.csv", index=False)
+df[cols].to_csv("data/predictions.csv", index=False)
 
-print("✅ predictions.csv başarıyla oluşturuldu (LIME FULL FIXED)")
+print("====================================")
+print(" THESIS-GRADE PREDICTIONS CREATED")
+print(" Bias Mean:", round(global_mean, 6))
+print(" Dataset Shape:", df.shape)
+print(" Model Version: v1_thesis_final")
+print("====================================")

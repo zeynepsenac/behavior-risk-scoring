@@ -15,9 +15,9 @@ engine = create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
 # CSV okunuyor (AYNI KALIYOR)
 df = pd.read_csv("data/engineered_customers.csv")
 
-# ✅ SADECE BURASI DEĞİŞTİ
+
 df.to_sql(
-    "engineered_features",   # ← düzeltildi
+    "engineered_features",   
     engine,
     if_exists="replace",
     index=False

@@ -1,13 +1,11 @@
-# =========================================
 # RESET & FRESH LOAD FOR RISK_DB
 # Postgres 16 + Docker
-# =========================================
+
 
 $ErrorActionPreference = "Stop"
 
-# -------------------------------------------------
-# 1️⃣ Config
-# -------------------------------------------------
+#  Config
+
 $containerName = "risk-postgres"
 $dbName = "risk_db"
 $dbUser = "postgres"
@@ -19,9 +17,9 @@ Write-Host ""
 Write-Host "=== RISK DB RESET STARTED ==="
 Write-Host ""
 
-# -------------------------------------------------
-# 2️⃣ Container running check
-# -------------------------------------------------
+
+#  Container running check
+
 Write-Host "Checking Docker container..."
 
 $running = docker ps --format "{{.Names}}" | Select-String $containerName
@@ -33,16 +31,16 @@ if (-not $running) {
 
 Write-Host "Container is running."
 
-# -------------------------------------------------
-# 3️⃣ Prepare container database folder
-# -------------------------------------------------
+
+#  Prepare container database folder
+
 Write-Host "Preparing /database directory inside container..."
 
 docker exec $containerName mkdir -p /database
 
-# -------------------------------------------------
-# 4️⃣ Copy migrations folder
-# -------------------------------------------------
+
+#  Copy migrations folder
+
 Write-Host "Copying migrations folder into container..."
 
 docker cp $migrationsFolder "${containerName}:/database/"
@@ -52,9 +50,8 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# -------------------------------------------------
-# 5️⃣ Copy fresh_all.sql
-# -------------------------------------------------
+#  Copy fresh_all.sql
+
 Write-Host "Copying fresh_all.sql into container..."
 
 docker cp $sqlFile "${containerName}:/fresh_all.sql"
@@ -64,9 +61,9 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# -------------------------------------------------
-# 6️⃣ Execute SQL
-# -------------------------------------------------
+
+#  Execute SQL
+
 Write-Host "Executing database reset..."
 
 docker exec -i $containerName `
@@ -77,9 +74,9 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# -------------------------------------------------
-# 7️⃣ Done
-# -------------------------------------------------
+
+#  Done
+
 Write-Host ""
 Write-Host "Database reset and fresh load completed successfully!"
 Write-Host ""

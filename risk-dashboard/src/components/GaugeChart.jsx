@@ -3,28 +3,30 @@ import { useEffect, useState } from "react";
 
 export default function GaugeChart({ score }) {
 
-  // ✅ FIX → score zaten 0–1 aralığında
-  const normalizedScore = Number.isFinite(score)
-    ? Math.max(0, Math.min(1, score))
-    : 0;
+  // ✅ HARDENED SAFE SCORE
+  const safeScore =
+    typeof score === "number" && Number.isFinite(score)
+      ? Math.max(0, Math.min(1, score))
+      : 0;
 
-  // 🎯 ANIMATION STATE
   const [animatedValue, setAnimatedValue] = useState(0);
 
   useEffect(() => {
     let start = 0;
     setAnimatedValue(0);
 
-    const duration = 800;
+    const duration = 700;
     const stepTime = 10;
     const steps = duration / stepTime;
-    const increment = normalizedScore / steps;
+
+    // ✅ safety fix (division by zero protection)
+    const increment = steps > 0 ? safeScore / steps : safeScore;
 
     const interval = setInterval(() => {
       start += increment;
 
-      if (start >= normalizedScore) {
-        start = normalizedScore;
+      if (start >= safeScore) {
+        start = safeScore;
         clearInterval(interval);
       }
 
@@ -32,46 +34,54 @@ export default function GaugeChart({ score }) {
     }, stepTime);
 
     return () => clearInterval(interval);
-  }, [normalizedScore]);
+  }, [safeScore]);
 
-  // 🎯 GAUGE VALUE (0–100)
-  const value = animatedValue * 100;
+  // % value
+  const value = Math.max(0, Math.min(100, animatedValue * 100));
 
-  // 🎨 RENK
+  // ✅ TEK DOĞRU KAYNAK (ANİMASYON DEĞİL GERÇEK SCORE)
+  const getLevel = (v) => {
+    if (v < 0.33) return "low";
+    if (v < 0.66) return "medium";
+    return "high";
+  };
+
+  const level = getLevel(safeScore);
+
   const getColor = () => {
-    if (animatedValue < 0.33) return "#16a34a";
-    if (animatedValue < 0.66) return "#facc15";
+    if (level === "low") return "#16a34a";
+    if (level === "medium") return "#facc15";
     return "#dc2626";
   };
 
-  // 🏷️ BADGE
   const getBadge = () => {
-    if (animatedValue < 0.33)
-      return { label: "LOW", color: "#16a34a", type: "low" };
-    if (animatedValue < 0.66)
-      return { label: "MEDIUM", color: "#facc15", type: "medium" };
-    return { label: "HIGH", color: "#dc2626", type: "high" };
+    if (level === "low")
+      return { label: "DÜŞÜK", color: "#16a34a", type: "low" };
+
+    if (level === "medium")
+      return { label: "ORTA", color: "#facc15", type: "medium" };
+
+    return { label: "YÜKSEK", color: "#dc2626", type: "high" };
   };
 
   const badge = getBadge();
 
-  // 🔥 CONTAINER EFFECT
   const getContainerEffect = () => {
     if (badge.type === "high") {
       return {
         animation: "pulse 1.5s infinite",
-        boxShadow: "0 0 25px rgba(220,38,38,0.4)"
+        boxShadow: "0 0 18px rgba(220,38,38,0.3)"
       };
     }
 
     if (badge.type === "medium") {
       return {
-        boxShadow: "0 0 15px rgba(250,204,21,0.3)"
+        boxShadow: "0 0 10px rgba(250,204,21,0.25)"
       };
     }
 
     return {
-      boxShadow: "0 0 10px rgba(22,163,74,0.2)"
+      boxShadow: "0 0 8px rgba(22,163,74,0.2)"
     };
   };
 
@@ -79,11 +89,11 @@ export default function GaugeChart({ score }) {
     <div
       style={{
         background: "white",
-        padding: "20px",
-        borderRadius: "16px",
+        padding: "14px",
+        borderRadius: "14px",
         textAlign: "center",
         fontFamily: "Inter, system-ui, sans-serif",
-        maxWidth: "500px",
+        maxWidth: "320px",
         margin: "0 auto",
         position: "relative",
         transition: "all 0.3s ease",
@@ -92,13 +102,13 @@ export default function GaugeChart({ score }) {
     >
       <h3
         style={{
-          marginBottom: "8px",
+          marginBottom: "6px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           gap: "6px",
           color: "#6b7280",
-          fontSize: "16px"
+          fontSize: "14px"
         }}
       >
         📊 Risk Ölçeri
@@ -108,16 +118,15 @@ export default function GaugeChart({ score }) {
       <div
         style={{
           position: "absolute",
-          top: "12px",
-          right: "12px",
+          top: "10px",
+          right: "10px",
           background: badge.color,
           color: "white",
-          padding: "5px 10px",
+          padding: "4px 8px",
           borderRadius: "999px",
-          fontSize: "11px",
+          fontSize: "10px",
           fontWeight: "600",
-          letterSpacing: "0.4px",
-          boxShadow: "0 3px 8px rgba(0,0,0,0.15)",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
           animation:
             badge.type === "high"
               ? "pulse 1.2s infinite"
@@ -127,8 +136,7 @@ export default function GaugeChart({ score }) {
         {badge.label}
       </div>
 
-      {/* GAUGE */}
-      <div style={{ height: "250px" }}>
+      <div style={{ height: "180px" }}>
         <GaugeComponent
           value={value}
           type="radial"
@@ -147,7 +155,7 @@ export default function GaugeChart({ score }) {
           labels={{
             valueLabel: {
               style: {
-                fontSize: "24px",
+                fontSize: "18px",
                 fontWeight: "700",
                 fill: getColor()
               },
@@ -159,8 +167,8 @@ export default function GaugeChart({ score }) {
 
       <p
         style={{
-          marginTop: "8px",
-          fontSize: "13px",
+          marginTop: "6px",
+          fontSize: "12px",
           color: "#6b7280"
         }}
       >
@@ -175,7 +183,7 @@ export default function GaugeChart({ score }) {
           @keyframes fadeIn {
             from {
               opacity: 0;
-              transform: scale(0.85);
+              transform: scale(0.9);
             }
             to {
               opacity: 1;
@@ -186,15 +194,15 @@ export default function GaugeChart({ score }) {
           @keyframes pulse {
             0% {
               transform: scale(1);
-              box-shadow: 0 0 0 rgba(220,38,38,0.4);
+              box-shadow: 0 0 0 rgba(220,38,38,0.3);
             }
             50% {
-              transform: scale(1.03);
-              box-shadow: 0 0 20px rgba(220,38,38,0.6);
+              transform: scale(1.02);
+              box-shadow: 0 0 15px rgba(220,38,38,0.4);
             }
             100% {
               transform: scale(1);
-              box-shadow: 0 0 0 rgba(220,38,38,0.4);
+              box-shadow: 0 0 0 rgba(220,38,38,0.3);
             }
           }
         `}

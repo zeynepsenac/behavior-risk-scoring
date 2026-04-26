@@ -7,7 +7,7 @@ DECLARE
     active_dataset TEXT := 'dataset_v1';
 BEGIN
 
-    -- 🔒 Infinite trigger loop protection
+  --  Sonsuz tetikleyici döngüsüne karşı koruma
     IF TG_TABLE_NAME <> 'engineered_features' THEN
         IF TG_OP = 'DELETE' THEN
             RETURN OLD;
@@ -28,9 +28,9 @@ BEGIN
     END IF;
 
 
-    -- ============================
+  
     -- DELETE AUDIT
-    -- ============================
+    
     IF TG_OP = 'DELETE' THEN
         INSERT INTO prediction_history (
             customer_id,
@@ -53,9 +53,9 @@ BEGIN
     END IF;
 
 
-    -- ============================
+ 
     -- UPDATE CHANGE CHECK
-    -- ============================
+ 
     IF TG_OP = 'UPDATE' THEN
         IF NEW.risk_score IS NOT DISTINCT FROM OLD.risk_score
            AND NEW.feature_version IS NOT DISTINCT FROM OLD.feature_version
@@ -65,9 +65,9 @@ BEGIN
     END IF;
 
 
-    -- ============================
+  
     -- INSERT & UPDATE AUDIT LOG
-    -- ============================
+  
     INSERT INTO prediction_history (
         customer_id,
         risk_score,

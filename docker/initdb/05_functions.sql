@@ -1,6 +1,5 @@
--- =====================================
 -- calculate_risk_score
--- =====================================
+
 
 CREATE OR REPLACE FUNCTION calculate_risk_score(_customer_id INT)
 RETURNS NUMERIC
@@ -22,9 +21,8 @@ $$;
 
 
 
--- =====================================
 -- explain_customer
--- =====================================
+
 
 CREATE OR REPLACE FUNCTION explain_customer(_customer_id INT)
 RETURNS JSON

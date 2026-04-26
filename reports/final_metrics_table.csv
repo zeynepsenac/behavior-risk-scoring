@@ -1,0 +1,10 @@
+Metric,Value
+Original Records,1200.0
+Final Records,1192.0
+Data Loss (%),0.67
+Average Group Size,35.06
+Minimum Group Size,4.0
+Re-identification Risk (%),4.71
+Distinct risk_score,70.0
+K value,3.0
+L value,3.0
