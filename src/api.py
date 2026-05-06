@@ -259,6 +259,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+
+
 # STARTUP CHECK
 
 @app.on_event("startup")
@@ -302,9 +305,9 @@ def fetch_customer_features(customer_id: int):
 
         features = dict(zip(FEATURES, row))
 
-        # -----------------------------
-        # 🔥 SAFE POST-PROCESSING FIX
-        # -----------------------------
+        
+        #  SAFE POST-PROCESSING FIX
+       
 
         # financial_resilience_score guard (FIXED)
         if "financial_resilience_score" in features:
@@ -823,9 +826,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
         predicted_score = ml_score
         predicted_band = calculate_risk_band(predicted_score)["band"]
 
-    # -----------------------------
+   
     # FINAL SCORE
-    # -----------------------------
+    
     final_score = (0.7 * ml_score) + (0.3 * rule_score)
     final_score = max(0.0, min(1.0, final_score))
 
@@ -880,7 +883,7 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
 
     feature_explanations = generate_feature_explanations(features)
 
-    # ✅ BURASI GÜNCELLENDİ
+    #  BURASI GÜNCELLENDİ
     summary = build_explanation_summary(feature_explanations, features)
 
     # -----------------------------
@@ -1024,7 +1027,7 @@ def simple_risk(customer_id: int):
     try:
         result = calculate_risk(customer_id, explain=False)
 
-        # 🔥 WARNING (FIXED → final_score kullan)
+        #  WARNING (FIXED → final_score kullan)
         warning = None
         try:
             if result.financial_resilience_score == 0 and result.final_score < 0.3:
@@ -1033,13 +1036,12 @@ def simple_risk(customer_id: int):
             warning = None
 
         return SimpleRiskResponse(
-            # 🔥 KRİTİK FIX
-            risk_score=result.final_score,   # ✅ predicted değil
+            #  KRİTİK FIX
+            risk_score=result.final_score,   #  predicted değil
 
             risk_band=result.risk_band,
             risk_label=result.risk_label,
 
-            # 🔥 CONFIDENCE (zaten doğruydu)
             confidence=result.model_confidence,
 
             warning=warning
@@ -1143,7 +1145,7 @@ import sys
 # BASE_DIR zaten sende var (değiştirme)
 # BASE_DIR = Path(__file__).resolve().parents[1]
 
-# ✅ PDF DOSYA YOLU (SENİN GERÇEK OLUŞTURDUĞUN YER)
+#  PDF DOSYA YOLU (SENİN GERÇEK OLUŞTURDUĞUN YER)
 PDF_PATH = BASE_DIR / "reports" / "model_evaluation_report.pdf"
 
 

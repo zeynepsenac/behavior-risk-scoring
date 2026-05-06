@@ -1,211 +1,304 @@
+/* ================= ROOT DESIGN TOKENS ================= */
 
-/* GLOBAL */
+:root {
+  --radius: 16px;
+
+  --shadow-soft: 0 10px 25px rgba(0,0,0,0.08);
+  --shadow-hover: 0 18px 40px rgba(0,0,0,0.12);
+
+  --primary: #2563eb;
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --danger: #dc2626;
+
+  --text-main: #0f172a;
+  --text-soft: #64748b;
+
+  --card-bg: rgba(255,255,255,0.85);
+  --border-soft: rgba(0,0,0,0.05);
+}
+
+/* ================= GLOBAL ================= */
 
 body {
   margin: 0;
   font-family: "Inter", sans-serif;
-  background: #f9fafb;
-  overflow: hidden;
 
-  color: #111827;
+  /* 🌿 SADECE BURASI DEĞİŞTİ */
+  background: #ecfdf5;
+
+  overflow: hidden;
+  color: var(--text-main);
 }
 
-/* root container */
 #root {
   max-width: 1100px;
   margin: 0 auto;
   padding: 16px;
-
   height: 100vh;
   box-sizing: border-box;
-
   display: flex;
   flex-direction: column;
 }
 
-/* DASHBOARD GRID */
-
-.dashboard-container {
-  display: grid;
-
-  grid-template-columns: repeat(3, 1fr);
-
-  grid-template-areas:
-    "score gauge ai"
-    "rules rules rules";
-
-  gap: 16px;
-
-  height: calc(100vh - 180px);
-
-  overflow: hidden;
-}
-
-/* GRID AREA MAPPING */
-
-.score-card {
-  grid-area: score;
-}
-
-.gauge-card {
-  grid-area: gauge;
-}
-
-.ai-card {
-  grid-area: ai;
-}
-
-/* FIX: RULES CARD */
-
-.rules-card {
-  grid-area: rules;
-
-  width: 100%;
-  min-width: 0;
-
-  display: flex;
-  flex-direction: column;
-
-  gap: 10px;
-}
-
-/* CARD DESIGN */
-
-.card {
-  background: white;
-  padding: 16px;
-  border-radius: 14px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-
-  justify-content: flex-start;
-
-  overflow: hidden;
-
-  color: #111827;
-}
-
-/* AI SCROLL */
-
-.ai-card {
-  overflow-y: auto;
-}
-
-/* 🔥 AÇIKLAMA YEŞİL (BURASI EKLENDİ) */
-.ai-card p,
-.ai-explanation {
-  color: #16a34a;
-}
-
-/* RULES FULL WIDTH CHILD FIX */
-
-.rules-card > * {
-  width: 100%;
-}
-
-/* GAUGE */
-
-.card canvas {
-  max-height: 200px !important;
-}
-
-/* TEXT */
+/* ================= HEADER ================= */
 
 h1 {
-  font-size: 32px;
+  font-size: 26px;
+  font-weight: 700;
   margin: 0;
 }
 
-h2 {
-  font-size: 18px;
-  margin-bottom: 8px;
+.subtitle {
+  color: var(--text-soft);
+  font-size: 14px;
+  margin-top: 4px;
 }
 
-h3 {
-  font-size: 15px;
-}
-
-/* INPUT & BUTTON */
+/* ================= INPUT ================= */
 
 input {
-  padding: 6px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-
-  color: #111827;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  outline: none;
+  transition: 0.2s;
 }
 
-button {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: none;
-  background: #111827;
+input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+}
+
+/* ================= BUTTONS ================= */
+
+.btn-analyze {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 600;
   cursor: pointer;
-  margin-right: 8px;
+  transition: 0.2s;
+  margin-right: 10px;
+}
+
+.btn-analyze:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(37,99,235,0.3);
+}
+
+.btn-pdf {
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-pdf:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(22,163,74,0.3);
+}
+
+.btn-pdf:active {
+  transform: scale(0.97);
+}
+
+/* ================= DASHBOARD ================= */
+
+.dashboard-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-areas:
+    "score gauge ai"
+    "rules rules rules";
+  gap: 16px;
+  height: calc(100vh - 200px);
+  overflow: hidden;
+}
+
+.dashboard-container > div {
+  min-height: 0;
+}
+
+/* ================= GRID ================= */
+
+.score-card { grid-area: score; }
+.gauge-card { grid-area: gauge; }
+.ai-card { grid-area: ai; }
+
+/* ================= RULES ================= */
+
+.rules-card {
+  grid-area: rules;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.rules-card::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rules-card::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+  border-radius: 10px;
+}
+
+.rules-card h2 {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(10px);
+  padding: 10px 5px;
+  margin: 0 0 10px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+/* ================= CARDS ================= */
+
+.card,
+.score-card,
+.gauge-card,
+.ai-card,
+.rules-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-soft);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ================= SCORE ================= */
+
+.score-value {
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+/* ================= AI ================= */
+
+.ai-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ai-content {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ================= FAKTÖRLER ================= */
+
+.ai-item {
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  margin-top: 6px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-left: 4px solid transparent;
+}
+
+.ai-card .ai-item.good {
+  background: rgba(22,163,74,0.12) !important;
+  color: #166534 !important;
+  border-left: 4px solid var(--success) !important;
+}
+
+.ai-card .ai-item.medium {
+  background: rgba(245,158,11,0.18) !important;
+  color: #92400e !important;
+  border-left: 4px solid var(--warning) !important;
+}
+
+.ai-card .ai-item.bad {
+  background: rgba(220,38,38,0.12) !important;
+  color: #991b1b !important;
+  border-left: 4px solid var(--danger) !important;
+}
+
+/* ================= RULES ================= */
+
+.rule-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  margin-bottom: 6px;
   font-size: 13px;
 }
 
-button:hover {
-  background: #1f2937;
+.rule-item.high {
+  background: rgba(220,38,38,0.1);
+  color: #991b1b;
+  border-left: 4px solid #dc2626;
 }
 
-/* ACTION LIST */
-
-.action-item {
-  display: flex;
-  justify-content: space-between;
-  border-left: 4px solid red;
-  padding-left: 10px;
-  margin-bottom: 10px;
+.rule-item.medium {
+  background: rgba(245,158,11,0.1);
+  color: #92400e;
+  border-left: 4px solid #f59e0b;
 }
 
-/* MOBILE */
+.rule-item.low {
+  background: rgba(22,163,74,0.1);
+  color: #166534;
+  border-left: 4px solid #16a34a;
+}
+
+/* ================= MOBILE ================= */
 
 @media (max-width: 768px) {
-  body {
-    overflow: auto;
-  }
+  body { overflow: auto; }
 
   #root {
-    padding: 12px;
     height: auto;
   }
 
-  h1 {
-    font-size: 26px;
-    text-align: center;
-  }
-
   .dashboard-container {
-    grid-template-columns: 1fr !important;
-
+    grid-template-columns: 1fr;
     grid-template-areas:
       "score"
       "gauge"
       "ai"
       "rules";
-
-    gap: 14px;
-    height: auto;
   }
+}
 
-  .card {
-    padding: 14px;
-  }
 
-  input {
-    width: 100%;
-    margin-bottom: 10px;
-  }
+@keyframes pulseSoft {
+  0%   { transform: scale(1); opacity: 0.9; }
+  50%  { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
+}
 
-  button {
-    width: 100%;
-    margin-top: 8px;
-  }
+@keyframes pulseMedium {
+  0%   { transform: scale(1); opacity: 0.8; }
+  50%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
 
-  /* ❌ BUNU SİLDİM (HER ŞEYİ EZİYORDU) */
+@keyframes pulseStrong {
+  0%   { transform: scale(1); opacity: 0.7; }
+  50%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.7; }
 }

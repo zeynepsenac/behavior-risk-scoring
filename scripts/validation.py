@@ -31,9 +31,9 @@ from reportlab.pdfbase.ttfonts import TTFont
 import matplotlib
 
 
-# =========================
+
 # PATH
-# =========================
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 
 DATA_PATH = BASE_DIR / "data" / "predictions.csv"
@@ -46,7 +46,6 @@ PDF_PATH = REPORT_DIR / "model_evaluation_report.pdf"
 FONT_PATH = Path(matplotlib.__file__).parent / "mpl-data" / "fonts" / "ttf" / "DejaVuSans.ttf"
 
 
-# =========================
 # VALIDATION
 # =========================
 def validate_features(df):

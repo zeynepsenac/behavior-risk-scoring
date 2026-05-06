@@ -10,7 +10,7 @@ from src.config.settings import DATABASE_TABLES
 
 # =========================
 # DB HOST AUTO DETECT
-# =========================
+
 def detect_db_host():
 
     env_host = os.getenv("DB_HOST")

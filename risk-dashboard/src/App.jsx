@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getRiskScore } from "./services/api";
 
 import GaugeChart from "./components/GaugeChart";
@@ -11,6 +11,8 @@ export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const [animatedScore, setAnimatedScore] = useState(0);
+
   const fallbackData = {
     predicted_risk_score: 0.28,
     predicted_band: "MEDIUM",
@@ -21,9 +23,6 @@ export default function App() {
     components: []
   };
 
-  // =========================
-  // DATA VALIDATION (GÜÇLENDİRİLDİ)
-  // =========================
   const isInvalidData = (d) => {
     if (!d) return true;
 
@@ -34,11 +33,32 @@ export default function App() {
     );
   };
 
-  const safeData = isInvalidData(data) ? fallbackData : data;
+  // ✅ SADECE BURASI DEĞİŞTİ
+  const safeData = data ?? fallbackData;
 
-  // =========================
-  // FETCH
-  // =========================
+  useEffect(() => {
+    if (safeData.predicted_risk_score === null) return;
+
+    let startTime = null;
+    const duration = 1000;
+
+    const animate = (time) => {
+      if (!startTime) startTime = time;
+      const progress = Math.min((time - startTime) / duration, 1);
+
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const value = eased * safeData.predicted_risk_score;
+
+      setAnimatedScore(value.toFixed(3));
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [safeData.predicted_risk_score]);
+
   const handleFetch = async () => {
     if (!id) return;
 
@@ -47,9 +67,6 @@ export default function App() {
     try {
       const res = await getRiskScore(id);
 
-      // =========================
-      // SAFE MAPPING (BACKEND UYUMLU)
-      // =========================
       const mapped = {
         predicted_risk_score:
           res?.predicted_risk_score ??
@@ -80,15 +97,9 @@ export default function App() {
           null,
 
         components:
-          res?.components ??
-          []
+          res?.components ?? []
       };
 
-      // =========================
-      // NORMALIZATION (KRİTİK FIX)
-      // =========================
-
-      // score 100 scale gelirse normalize et
       if (mapped.predicted_risk_score > 1) {
         mapped.predicted_risk_score /= 100;
       }
@@ -107,85 +118,81 @@ export default function App() {
     }
   };
 
-  // =========================
-  // UI
-  // =========================
   return (
     <div>
 
-      {/* HEADER */}
-      <div style={{ marginBottom: "16px" }}>
+      <div className="top-panel">
         <h1>📊 Risk Kontrol Paneli</h1>
 
-        <p style={{ marginTop: "4px", color: "#6b7280" }}>
+        <p className="subtitle">
           Rapor No: RISK-{id || "-"}
         </p>
 
-        <div style={{ marginTop: "12px", display: "flex", gap: "10px" }}>
+        <div style={{ marginTop: "18px", display: "flex", alignItems: "center", gap: "10px" }}>
           <input
             placeholder="Müşteri ID (1-1200)"
             value={id}
             onChange={(e) => setId(e.target.value)}
           />
 
-          <button onClick={handleFetch}>
-            Analiz Et
+          <button
+            className="btn-analyze"
+            onClick={handleFetch}
+            disabled={loading}
+          >
+            {loading ? "Analiz ediliyor..." : "📊 Analiz Et"}
           </button>
 
-          {/* PDF FRONTEND BUTTON FIX */}
           <button
+            className="btn-pdf"
+            disabled={loading}
             onClick={() =>
               window.open("http://127.0.0.1:8000/report", "_blank")
             }
           >
-            PDF Rapor
+            📄 PDF Rapor
           </button>
         </div>
+
+        <p className="helper-text">
+          Lütfen bir müşteri ID girerek analizi başlatın.
+        </p>
       </div>
 
-      {/* LOADING */}
       {loading && <Skeleton />}
 
-      {/* EMPTY STATE */}
       {!loading && !data && (
-        <div style={{ color: "#6b7280", padding: "20px" }}>
-          Lütfen bir müşteri ID girerek analizi başlatın.
+        <div style={{ color: "#6b7280", padding: "20px", textAlign: "center" }}>
+          Henüz analiz yapılmadı
         </div>
       )}
 
-      {/* DASHBOARD */}
       {!loading && data && (
         <div className="dashboard-container">
 
-          {/* SCORE */}
           <div className="card score-card">
             <h2>Risk Skoru</h2>
-
-            <div
-              style={{
-                fontSize: "32px",
-                fontWeight: "bold",
-                color: "#ef4444"
-              }}
-            >
+            <div className="score-value">
               {safeData.predicted_risk_score !== null
-                ? safeData.predicted_risk_score.toFixed(3)
+                ? animatedScore
                 : "N/A"}
             </div>
           </div>
 
-          {/* GAUGE */}
           <div className="card gauge-card">
             <h2>Risk Ölçer</h2>
-            <GaugeChart score={safeData.predicted_risk_score} />
+
+            <GaugeChart
+              score={safeData.predicted_risk_score}
+              predicted_band={safeData.predicted_band}
+              financial_resilience_score={safeData.financial_resilience_score}
+            />
           </div>
 
-          {/* AI EXPLANATION */}
           <div className="card ai-card">
             <AIExplainabilityDashboard data={safeData} />
           </div>
 
-          {/* RULES */}
           <div className="card rules-card">
             <h2>Kural Tabanlı Analiz</h2>
 

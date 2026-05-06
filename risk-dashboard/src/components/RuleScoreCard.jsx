@@ -1,58 +1,78 @@
-import { evaluateRule } from "../utils/ruleEngine";
 import { useMemo } from "react";
 
 export default function RuleScoreCard({ components, model_confidence }) {
 
-  // ✅ components güvenli erişim
   const safe = Array.isArray(components)
     ? components[0] ?? {}
     : components ?? {};
 
-  // 🔧 SAFE NORMALIZATION (tek kaynak)
   const normalize = (v) => {
     const num = Number(v);
     if (!Number.isFinite(num)) return null;
     return num > 1 ? num / 100 : num;
   };
 
-  // 🔥 TEK THRESHOLD SOURCE (tutarlı)
-  const getLevel = (value) => {
+  const getLevel = (key, value) => {
     if (value === null) return "unknown";
-    if (value < 0.6) return "low";
-    if (value < 0.8) return "medium";
-    return "high";
+
+    if (key === "financial_resilience") {
+      if (value < 0.3) return "high";
+      if (value < 0.6) return "medium";
+      return "low";
+    }
+
+    if (value < 0.4) return "high";
+    if (value < 0.7) return "medium";
+    return "low";
   };
 
-  // 🧠 EXPLANATION (rule + level SENKRON)
   const explainValue = (key, rawValue) => {
     const value = normalize(rawValue);
     if (value === null) return "Veri bulunamadı";
 
-    const level = getLevel(value);
+    const level = getLevel(key, value);
 
     if (key === "financial_resilience") {
-      if (value < 0.2) return "KRİTİK: Finansal dayanıklılık çok zayıf";
-      if (level === "low") return "Zayıf finansal dayanıklılık";
-      if (level === "medium") return "Orta seviye finansal dayanıklılık";
-      return "Güçlü finansal dayanıklılık";
+      if (value < 0.2)
+        return (
+          <>
+            <b>KRİTİK:</b> Finansal dayanıklılık çok zayıf →{" "}
+            <b>yüksek kırılganlık</b>
+          </>
+        );
+
+      if (level === "high")
+        return "Zayıf finansal yapı → risk artırır";
+
+      if (level === "medium")
+        return "Orta finansal yapı → sınırlı koruma";
+
+      return "Güçlü finansal yapı → koruyucu faktör";
     }
 
     if (key === "payment_discipline") {
-      if (level === "low") return "Zayıf ödeme disiplini → risk artırır";
-      if (level === "medium") return "Orta ödeme disiplini";
+      if (level === "high")
+        return "Zayıf ödeme disiplini → risk artırır";
+
+      if (level === "medium")
+        return "Orta ödeme disiplini → nötr etki";
+
       return "Güçlü ödeme disiplini → koruyucu faktör";
     }
 
     if (key === "income_stability") {
-      if (level === "low") return "Gelir dalgalı → risk artar";
-      if (level === "medium") return "Orta gelir istikrarı";
-      return "Stabil gelir yapısı → risk azaltır";
+      if (level === "high")
+        return "Gelir dalgalı → risk artar";
+
+      if (level === "medium")
+        return "Orta gelir istikrarı → sınırlı güven";
+
+      return "Stabil gelir → risk azaltır";
     }
 
     return "Bilinmeyen özellik";
   };
 
-  // 📦 RULE LIST (tek kaynak veri akışı)
   const rules = useMemo(() => [
     {
       name: "Finansal Dayanıklılık",
@@ -71,55 +91,76 @@ export default function RuleScoreCard({ components, model_confidence }) {
     },
   ], [safe]);
 
+  const worstRule = useMemo(() => {
+    return rules
+      .map(r => ({
+        ...r,
+        value: normalize(r.value)
+      }))
+      .filter(r => r.value !== null)
+      .sort((a, b) => a.value - b.value)[0];
+  }, [rules]);
+
   return (
     <div className="rule-layout">
 
-      {/* LEFT */}
       <div className="rule-card-wrapper">
         <h3 className="rule-title-main">📊 Kural Tabanlı Skor Kartı</h3>
 
+        {worstRule && (
+          <div className="worst-box">
+            ⚠️ En etkili faktör: {worstRule.name}
+          </div>
+        )}
+
         <div className="rule-list">
           {rules.map((rule, i) => {
-            const rawValue = rule.value;
-            const value = normalize(rawValue);
+            const value = normalize(rule.value);
 
             if (value === null) {
               return (
                 <div key={i} className="rule-item muted">
-                  <div>
-                    <div className="rule-name">{rule.name}</div>
-                    <div className="rule-desc">Veri bulunamadı</div>
-                  </div>
+                  Veri bulunamadı
                 </div>
               );
             }
 
-            // 🔥 TEK SOURCE OF TRUTH
-            const matched = evaluateRule(rule.key, value);
-
-            const safeMatched = matched ?? {
-              label: "Bilinmiyor",
-              color: "#9ca3af",
-            };
+            const level = getLevel(rule.key, value);
+            const isWorst = worstRule?.key === rule.key;
 
             return (
               <div
                 key={i}
-                className="rule-item"
-                style={{ borderLeft: `4px solid ${safeMatched.color}` }}
+                className={`rule-item ${level} ${isWorst ? "highlight" : ""}`}
+                style={{
+                  borderLeft: `4px solid ${
+                    level === "high"
+                      ? "#dc2626"
+                      : level === "medium"
+                      ? "#f59e0b"
+                      : "#16a34a"
+                  }`
+                }}
               >
+                <span className="rule-icon">
+                  {level === "high" ? "🔴" : level === "medium" ? "🟡" : "🟢"}
+                </span>
+
                 <div>
                   <div className="rule-name">{rule.name}</div>
 
-                  <div
-                    className="rule-label"
-                    style={{ color: safeMatched.color }}
-                  >
-                    {safeMatched.label}
+                  <div className="rule-label">
+                    <b>
+                      {level === "high"
+                        ? "Yüksek Risk"
+                        : level === "medium"
+                        ? "Orta Risk"
+                        : "Düşük Risk"}
+                    </b>
                   </div>
 
                   <div className="rule-desc">
-                    {explainValue(rule.key, rawValue)}
+                    {explainValue(rule.key, rule.value)}
                   </div>
                 </div>
 
@@ -132,13 +173,11 @@ export default function RuleScoreCard({ components, model_confidence }) {
         </div>
       </div>
 
-      {/* RIGHT */}
       <div className="rule-right">
 
         <div className="mini-card">
           <h4>🧠 Model</h4>
           <p><b>Versiyon:</b> v1.0</p>
-
           <p>
             <b>Güven:</b>{" "}
             {typeof model_confidence === "number"
@@ -153,51 +192,21 @@ export default function RuleScoreCard({ components, model_confidence }) {
         <div className="mini-card">
           <h4>📌 Özellikler</h4>
 
-          <p>
-            Finansal:{" "}
-            {explainValue(
-              "financial_resilience",
-              safe.financial_resilience_score
-            )}
-          </p>
-
-          <p>
-            Ödeme:{" "}
-            {explainValue(
-              "payment_discipline",
-              safe.payment_discipline_score
-            )}
-          </p>
-
-          <p>
-            Gelir:{" "}
-            {explainValue(
-              "income_stability",
-              safe.income_stability_index
-            )}
-          </p>
+          <p>Finansal: {explainValue("financial_resilience", safe.financial_resilience_score)}</p>
+          <p>Ödeme: {explainValue("payment_discipline", safe.payment_discipline_score)}</p>
+          <p>Gelir: {explainValue("income_stability", safe.income_stability_index)}</p>
         </div>
 
       </div>
 
-      {/* STYLE (DEĞİŞMEDİ) */}
       <style>{`
         .rule-layout {
           display: flex;
           gap: 16px;
-          align-items: stretch;
         }
 
         .rule-card-wrapper {
           flex: 2;
-          margin-top: 10px;
-        }
-
-        .rule-title-main {
-          font-size: 14px;
-          font-weight: 600;
-          margin-bottom: 12px;
-          color: #111827;
         }
 
         .rule-list {
@@ -207,71 +216,37 @@ export default function RuleScoreCard({ components, model_confidence }) {
         }
 
         .rule-item {
+          position: relative;
           display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
+          align-items: center;
+          gap: 10px;
           padding: 12px;
-          border-radius: 12px;
+          border-radius: 10px;
           background: #f9fafb;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.04);
         }
 
-        .rule-item.muted {
-          border-left: 4px solid #d1d5db;
+        .rule-item.low { background: rgba(22,163,74,0.1); }
+        .rule-item.medium { background: rgba(245,158,11,0.1); }
+        .rule-item.high { background: rgba(220,38,38,0.1); }
+
+        .rule-item.highlight {
+          box-shadow: 0 0 0 2px rgba(220,38,38,0.35);
         }
 
-        .rule-name {
-          font-size: 13px;
-          font-weight: 600;
-          color: #111827;
-        }
-
-        .rule-label {
-          font-size: 12px;
-          font-weight: 600;
-          margin-top: 2px;
-        }
-
-        .rule-desc {
-          font-size: 11px;
-          color: #6b7280;
-          margin-top: 2px;
+        .rule-icon {
+          font-size: 14px;
         }
 
         .rule-score {
-          font-size: 12px;
-          font-weight: 700;
+          position: absolute;
+          top: 8px;
+          right: 10px;
+          font-size: 13px;
+          font-weight: 800;
           color: #2563eb;
           background: white;
           padding: 4px 8px;
           border-radius: 8px;
-        }
-
-        .rule-right {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .mini-card {
-          background: #ffffff;
-          border-radius: 12px;
-          padding: 12px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-          border: 1px solid #eef0f3;
-        }
-
-        .mini-card h4 {
-          font-size: 13px;
-          margin-bottom: 8px;
-          color: #111827;
-        }
-
-        .mini-card p {
-          font-size: 12px;
-          color: #4b5563;
-          margin: 4px 0;
         }
       `}</style>
     </div>

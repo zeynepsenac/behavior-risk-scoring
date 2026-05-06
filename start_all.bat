@@ -14,7 +14,7 @@ echo BACKEND BASLIYOR
 echo =========================
 
 REM ❗ BURASI DEĞİŞTİ
-start cmd /k "uvicorn src.api:app --reload"
+start cmd /k " uvicorn src.api:app --reload"
 
 timeout /t 3 >nul
 
@@ -29,4 +29,4 @@ echo =========================
 echo SISTEM CALISIYOR
 echo =========================
 
-pause
+pause   

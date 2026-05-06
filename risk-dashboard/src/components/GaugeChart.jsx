@@ -1,212 +1,201 @@
 import GaugeComponent from "react-gauge-component";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
-export default function GaugeChart({ score }) {
+export default function GaugeChart({ score, predicted_band, financial_resilience_score }) {
 
-  // ✅ HARDENED SAFE SCORE
+  const normalize = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return n > 1 ? n / 100 : n;
+  };
+
   const safeScore =
     typeof score === "number" && Number.isFinite(score)
       ? Math.max(0, Math.min(1, score))
       : 0;
 
   const [animatedValue, setAnimatedValue] = useState(0);
+  const prevScoreRef = useRef(0);
+
+  const resilience = normalize(financial_resilience_score);
+  let finalBand = predicted_band;
+
+  const [isDark, setIsDark] = useState(
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+
+  const [isHover, setIsHover] = useState(false);
 
   useEffect(() => {
-    let start = 0;
-    setAnimatedValue(0);
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const listener = () => setIsDark(media.matches);
 
-    const duration = 700;
-    const stepTime = 10;
-    const steps = duration / stepTime;
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, []);
 
-    // ✅ safety fix (division by zero protection)
-    const increment = steps > 0 ? safeScore / steps : safeScore;
+  useEffect(() => {
+    let startTime = null;
 
-    const interval = setInterval(() => {
-      start += increment;
+    const startValue = prevScoreRef.current;
+    const endValue = safeScore;
 
-      if (start >= safeScore) {
-        start = safeScore;
-        clearInterval(interval);
+    const duration = 1200;
+
+    function animate(timestamp) {
+      if (!startTime) startTime = timestamp;
+
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+
+      const currentValue = startValue + (endValue - startValue) * ease;
+      setAnimatedValue(currentValue);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        prevScoreRef.current = endValue;
       }
+    }
 
-      setAnimatedValue(start);
-    }, stepTime);
-
-    return () => clearInterval(interval);
+    requestAnimationFrame(animate);
   }, [safeScore]);
 
-  // % value
   const value = Math.max(0, Math.min(100, animatedValue * 100));
 
-  // ✅ TEK DOĞRU KAYNAK (ANİMASYON DEĞİL GERÇEK SCORE)
-  const getLevel = (v) => {
-    if (v < 0.33) return "low";
-    if (v < 0.66) return "medium";
+  const getLevelFromBand = (band) => {
+    if (band === "LOW") return "low";
+    if (band === "MEDIUM") return "medium";
     return "high";
   };
 
-  const level = getLevel(safeScore);
+  const level = getLevelFromBand(finalBand);
 
-  const getColor = () => {
-    if (level === "low") return "#16a34a";
-    if (level === "medium") return "#facc15";
-    return "#dc2626";
-  };
-
-  const getBadge = () => {
-    if (level === "low")
-      return { label: "DÜŞÜK", color: "#16a34a", type: "low" };
-
-    if (level === "medium")
-      return { label: "ORTA", color: "#facc15", type: "medium" };
-
-    return { label: "YÜKSEK", color: "#dc2626", type: "high" };
-  };
-
-  const badge = getBadge();
-
-  const getContainerEffect = () => {
-    if (badge.type === "high") {
-      return {
-        animation: "pulse 1.5s infinite",
-        boxShadow: "0 0 18px rgba(220,38,38,0.3)"
-      };
+  const config = {
+    low: {
+      label: "DÜŞÜK RİSK",
+      color: "#22c55e",
+      glow: "0 0 20px #22c55e, 0 0 40px #22c55e55",
+      glowHover: "0 0 30px #22c55e, 0 0 60px #22c55eaa"
+    },
+    medium: {
+      label: "ORTA RİSK",
+      color: "#f59e0b",
+      glow: "0 0 20px #f59e0b, 0 0 40px #f59e0b55",
+      glowHover: "0 0 30px #f59e0b, 0 0 60px #f59e0baa"
+    },
+    high: {
+      label: "YÜKSEK RİSK",
+      color: "#ef4444",
+      glow: "0 0 20px #ef4444, 0 0 40px #ef444455",
+      glowHover: "0 0 30px #ef4444, 0 0 60px #ef4444aa"
     }
-
-    if (badge.type === "medium") {
-      return {
-        boxShadow: "0 0 10px rgba(250,204,21,0.25)"
-      };
-    }
-
-    return {
-      boxShadow: "0 0 8px rgba(22,163,74,0.2)"
-    };
   };
+
+  const current = config[level];
+
+  const theme = isDark
+    ? {
+        bg: "radial-gradient(circle at 30% 20%, #0f172a, #020617)",
+        textMain: "#e2e8f0",
+        textSoft: "#64748b",
+        pointer: "#38bdf8",
+        shadow: "0 0 20px rgba(0,0,0,0.6)"
+      }
+    : {
+        bg: "linear-gradient(145deg, #ffffff, #f8fafc)",
+        textMain: "#0f172a",
+        textSoft: "#94a3b8",
+        pointer: "#1e293b",
+        shadow: "0 10px 30px rgba(0,0,0,0.08)"
+      };
 
   return (
     <div
+      onMouseEnter={() => setIsHover(true)}
+      onMouseLeave={() => setIsHover(false)}
       style={{
-        background: "white",
-        padding: "14px",
-        borderRadius: "14px",
+        background: theme.bg,
+        borderRadius: "18px",
+        padding: "20px",
+        maxWidth: "340px",
+        margin: "0 auto",
         textAlign: "center",
         fontFamily: "Inter, system-ui, sans-serif",
-        maxWidth: "320px",
-        margin: "0 auto",
-        position: "relative",
+        boxShadow: `
+          ${theme.shadow},
+          ${isDark ? (isHover ? current.glowHover : current.glow) : ""}
+        `,
+        transform: isHover ? "scale(1.02)" : "scale(1)",
+        border: isDark ? "1px solid rgba(255,255,255,0.05)" : "none",
         transition: "all 0.3s ease",
-        ...getContainerEffect()
+        position: "relative"
       }}
     >
-      <h3
-        style={{
-          marginBottom: "6px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "6px",
-          color: "#6b7280",
-          fontSize: "14px"
-        }}
-      >
-        📊 Risk Ölçeri
-      </h3>
-
-      {/* BADGE */}
-      <div
-        style={{
-          position: "absolute",
-          top: "10px",
-          right: "10px",
-          background: badge.color,
-          color: "white",
-          padding: "4px 8px",
-          borderRadius: "999px",
-          fontSize: "10px",
-          fontWeight: "600",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-          animation:
-            badge.type === "high"
-              ? "pulse 1.2s infinite"
-              : "fadeIn 0.5s ease"
-        }}
-      >
-        {badge.label}
-      </div>
-
-      <div style={{ height: "180px" }}>
+      <div style={{ height: "200px", position: "relative" }}>
         <GaugeComponent
           value={value}
           type="radial"
+          animationDuration={0}
           arc={{
             gradient: true,
+            width: 0.25,
+            padding: 0.02,
             subArcs: [
-              { limit: 33, color: "#16a34a" },
-              { limit: 66, color: "#facc15" },
-              { color: "#dc2626" }
+              { limit: 33, color: "#22c55e" },
+              { limit: 66, color: "#f59e0b" },
+              { color: "#ef4444" }
             ]
           }}
           pointer={{
             type: "arrow",
-            color: "#111827"
+            color: theme.pointer,
+            length: 0.6,
+            width: 12
           }}
           labels={{
             valueLabel: {
-              style: {
-                fontSize: "18px",
-                fontWeight: "700",
-                fill: getColor()
-              },
-              formatTextValue: (v) => `${Math.round(v)}%`
+              formatTextValue: () => "" // 🔥 küçük yüzde tamamen kapatıldı
             }
           }}
         />
+
+        <div
+          style={{
+            position: "absolute",
+            top: "48%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            fontSize: "34px",
+            fontWeight: "800",
+            color: theme.textMain
+          }}
+        >
+          {Math.round(value)}%
+        </div>
       </div>
 
-      <p
+      <div
         style={{
-          marginTop: "6px",
-          fontSize: "12px",
-          color: "#6b7280"
+          marginTop: "10px",
+          fontSize: "14px",
+          fontWeight: "700",
+          color: current.color,
+          animation:
+            level === "low"
+              ? "pulseSoft 2.5s infinite"
+              : level === "medium"
+              ? "pulseMedium 1.8s infinite"
+              : "pulseStrong 1.2s infinite",
+          textShadow: `0 0 10px ${current.color}`
         }}
       >
-        Risk seviyesi:{" "}
-        <strong style={{ color: badge.color }}>
-          {badge.label}
-        </strong>
-      </p>
+        {current.label}
+      </div>
 
-      <style>
-        {`
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-              transform: scale(0.9);
-            }
-            to {
-              opacity: 1;
-              transform: scale(1);
-            }
-          }
-
-          @keyframes pulse {
-            0% {
-              transform: scale(1);
-              box-shadow: 0 0 0 rgba(220,38,38,0.3);
-            }
-            50% {
-              transform: scale(1.02);
-              box-shadow: 0 0 15px rgba(220,38,38,0.4);
-            }
-            100% {
-              transform: scale(1);
-              box-shadow: 0 0 0 rgba(220,38,38,0.3);
-            }
-          }
-        `}
-      </style>
+      <div style={{ fontSize: "12px", color: theme.textSoft, marginTop: "4px" }}>
+        Risk seviyesi analiz edildi
+      </div>
     </div>
   );
 }

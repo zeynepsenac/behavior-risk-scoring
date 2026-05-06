@@ -52,7 +52,7 @@ else:
         violation_ratio = len(violations) / len(anon_df)
         print(f"İhlal oranı: %{round(violation_ratio * 100, 2)}")
 
-        # 🔥 FIX 1: threshold artırıldı (0.10 → 0.20)
+        # FIX 1: threshold artırıldı (0.10 → 0.20)
         if violation_ratio > 0.20:
 
             if "spending_ratio" in anon_df.columns:
@@ -87,11 +87,11 @@ else:
         print(f"Suppression kaldırılan: {before_suppression - after_suppression}")
 
 # =========================
-# ✅ L-DIVERSITY FIXED
+#  L-DIVERSITY FIXED
 # =========================
 if quasi_identifiers and "risk_score" in anon_df.columns:
 
-    # 🔥 FIX 2: L=2 → L=3
+    #  FIX 2: L=2 → L=3
     L_VALUE = 3
 
     l_violations, stats = check_l_diversity(

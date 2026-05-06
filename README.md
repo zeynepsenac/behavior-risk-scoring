@@ -113,7 +113,7 @@ BEHAVIOR-RISK-SCORING/
 ### 📦 Clone
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/behavior-risk-scoring.git
+git clone https://vscode.dev/github/zeynepsenac/behavior-risk-scoring.git
 cd behavior-risk-scoring
 ```
 

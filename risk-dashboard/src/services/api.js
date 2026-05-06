@@ -29,13 +29,19 @@ export const getRiskScore = async (id) => {
     }
 
     // ======================================
-    // 🔥 SCORE SAFE PARSE
+    // 🔥 SCORE SAFE PARSE (CRITICAL FIX)
     // ======================================
-    const score = Number(data?.predicted_risk_score);
-    const safeScore = Number.isFinite(score) ? score : 0;
+    let score = Number(data?.predicted_risk_score ?? data?.risk_score);
+
+    if (!Number.isFinite(score)) score = 0;
+
+    // 🔥 normalize (0-100 → 0-1)
+    if (score > 1) score = score / 100;
+
+    const safeScore = Math.max(0, Math.min(1, score));
 
     // ======================================
-    // 🔥 BAND NORMALIZATION (UI SAFE)
+    // 🔥 BAND NORMALIZATION
     // ======================================
     const rawBand =
       data?.predicted_band ??
@@ -43,9 +49,7 @@ export const getRiskScore = async (id) => {
       data?.risk_label ??
       "MEDIUM";
 
-    const normalizedBand = String(rawBand)
-      .toUpperCase()
-      .trim();
+    const normalizedBand = String(rawBand).toUpperCase().trim();
 
     const allowedBands = ["LOW", "MEDIUM", "HIGH"];
 
@@ -77,21 +81,23 @@ export const getRiskScore = async (id) => {
     };
 
     // ======================================
-    // 🔥 FEATURE IMPORTANCE SAFE
+    // 🔥 FEATURE IMPORTANCE
     // ======================================
     const feature_importance = Array.isArray(data?.feature_importance)
       ? data.feature_importance
       : null;
 
     // ======================================
-    // 🔥 MODEL CONFIDENCE SAFE
+    // 🔥 MODEL CONFIDENCE (FIX)
     // ======================================
-    const model_confidence = Number.isFinite(data?.model_confidence)
-      ? Number(data.model_confidence)
-      : 0;
+    let model_confidence = Number(data?.model_confidence ?? data?.confidence);
+
+    if (!Number.isFinite(model_confidence)) model_confidence = 0;
+
+    if (model_confidence > 1) model_confidence /= 100;
 
     // ======================================
-    // 🔥 EXPLANATION SAFE TEXT
+    // 🔥 EXPLANATION SAFE
     // ======================================
     const explanation =
       typeof data?.explanation === "string" &&
@@ -105,30 +111,27 @@ export const getRiskScore = async (id) => {
     return {
       ...data,
 
-      // CORE METRICS
+      // CORE
       predicted_risk_score: safeScore,
       risk_score: safeScore,
 
+      // BAND
       risk_band: finalBand,
       predicted_band: finalBand,
       risk_label: finalBand,
 
-      // OPTIONAL UI COLOR (backend yoksa null)
+      // OPTIONAL COLOR
       risk_color: data?.risk_color ?? null,
 
-      // CLEAN COMPONENTS
+      // COMPONENTS
       components,
 
-      // FEATURE IMPORTANCE
+      // EXTRA
       feature_importance,
-
-      // MODEL CONFIDENCE
       model_confidence,
-
-      // TEXT SAFE
       explanation,
 
-      // DEBUG / FUTURE USE
+      // DEBUG
       raw_band: rawBand,
     };
 
