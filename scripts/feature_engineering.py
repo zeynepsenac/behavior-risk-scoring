@@ -5,9 +5,9 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
-# =========================
+
 # IMPORTS
-# =========================
+
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
@@ -20,17 +20,17 @@ from scripts.load_postgres import promote_to_production
 
 STAGING_TABLE = DATABASE_TABLES["STAGING_ENGINEERED"]
 
-# =========================
+
 # LOAD RAW DATA
-# =========================
+
 df = pd.read_csv("data/synthetic_customers.csv")
 
 print("Ham veri örneği:")
 print(df.head())
 
-# =========================
+
 # FEATURE ENGINEERING
-# =========================
+
 
 df["payment_discipline_score"] = (
     100
@@ -42,9 +42,9 @@ df["income_stability_index"] = (
     (1 - df["income_variance"]) * 100
 ).clip(0, 100)
 
-# =========================
-# 🔥 FIXED RESILIENCE (FLOOR EKLENDİ)
-# =========================
+
+#  FIXED RESILIENCE (FLOOR EKLENDİ)
+
 
 def calculate_financial_resilience(row):
     savings = row["savings_rate"]
@@ -57,7 +57,7 @@ def calculate_financial_resilience(row):
 
     score = savings_component + spending_component + payment_component
 
-    # ✅ KRİTİK FIX: 0'ı engelle (information loss önleme)
+    #  KRİTİK FIX: 0'ı engelle (information loss önleme)
     score = max(score, 5)
 
     return min(100, score)
@@ -67,9 +67,9 @@ df["financial_resilience_score"] = df.apply(
     calculate_financial_resilience, axis=1
 )
 
-# =========================
+
 # SAFE NUMERIC HANDLING
-# =========================
+
 
 df["financial_resilience_score"] = df["financial_resilience_score"].replace(
     [np.inf, -np.inf], np.nan
@@ -89,9 +89,9 @@ df["financial_resilience_score"] = df["financial_resilience_score"].astype(float
 print("\nResilience min/max kontrol:")
 print(df["financial_resilience_score"].describe())
 
-# =========================
+
 # MODEL FEATURE CHECK
-# =========================
+
 
 MODEL_FEATURES = [
     "monthly_income",
@@ -111,9 +111,9 @@ if missing_features:
 
 print("\nModel feature set doğrulandı")
 
-# =========================
+
 # RISK SCORE NORMALIZATION
-# =========================
+
 
 if "risk_score" in df.columns:
     print("\nRisk score kontrol ediliyor...")
@@ -128,9 +128,9 @@ if "risk_score" in df.columns:
 
     assert df["risk_score"].between(0, 1).all(), "risk_score 0-1 değil!"
 
-# =========================
+
 # SAFE CLEANING
-# =========================
+
 
 df = df.replace([np.inf, -np.inf], np.nan)
 
@@ -147,25 +147,25 @@ df[feature_cols] = df[feature_cols].fillna(df[feature_cols].median())
 other_cols = [c for c in df.columns if c not in feature_cols]
 df[other_cols] = df[other_cols].fillna(0)
 
-# =========================
+
 # CONSISTENCY CHECK
-# =========================
+
 
 print("\nFeature range check:")
 
 for col in feature_cols:
     print(f"{col}: min={df[col].min()}, max={df[col].max()}")
 
-# =========================
+
 # SAVE LOCAL
-# =========================
+
 
 df.to_csv("data/engineered_customers.csv", index=False)
 print("\nFeature engineering tamamlandı.")
 
-# =========================
+
 # POSTGRES WRITE
-# =========================
+
 
 print(f"\nStaging tabloya yazılıyor → {STAGING_TABLE}")
 
@@ -178,17 +178,17 @@ df.to_sql(
 
 print("Veri staging'e yazıldı.")
 
-# =========================
+
 # VALIDATION
-# =========================
+
 
 print("\nValidation başlıyor...")
 validate_features(df)
 print("Validation başarılı.")
 
-# =========================
+
 # PROMOTION
-# =========================
+
 
 print("\nProduction'a promote ediliyor...")
 promote_to_production()

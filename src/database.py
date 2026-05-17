@@ -8,7 +8,7 @@ import numpy as np
 from src.config.settings import DATABASE_TABLES
 
 
-# =========================
+
 # DB HOST AUTO DETECT
 
 def detect_db_host():
@@ -108,7 +108,7 @@ def load_customers_postgres(table_name: str = DEFAULT_ENGINEERED_TABLE):
     df = pd.read_sql(query, postgres_engine)
 
     # =========================
-    # 🔥 ML SAFETY LAYER (IMPROVED)
+    #  ML SAFETY LAYER (IMPROVED)
     # =========================
 
     feature_cols = [
@@ -117,16 +117,16 @@ def load_customers_postgres(table_name: str = DEFAULT_ENGINEERED_TABLE):
         "financial_resilience_score"
     ]
 
-    # ❗ FIX 1: inf -> NaN
+    #  FIX 1: inf -> NaN
     df[feature_cols] = df[feature_cols].replace([np.inf, -np.inf], np.nan)
 
-    # ❗ FIX 2: smarter imputation (median instead of 0 bias)
+    #  FIX 2: smarter imputation (median instead of 0 bias)
     df[feature_cols] = df[feature_cols].fillna(df[feature_cols].median())
 
-    # ❗ FIX 3: type safety
+    #  FIX 3: type safety
     df[feature_cols] = df[feature_cols].astype(float)
 
-    # ❗ FIX 4: hard lower bound (no negative ML noise)
+    #  FIX 4: hard lower bound (no negative ML noise)
     for col in feature_cols:
         df[col] = df[col].clip(lower=0, upper=100)
 

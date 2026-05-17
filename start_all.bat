@@ -13,8 +13,7 @@ echo =========================
 echo BACKEND BASLIYOR
 echo =========================
 
-REM ❗ BURASI DEĞİŞTİ
-start cmd /k " uvicorn src.api:app --reload"
+start cmd /k "uvicorn src.api:app --reload"
 
 timeout /t 3 >nul
 
@@ -22,11 +21,19 @@ echo =========================
 echo FRONTEND BASLIYOR
 echo =========================
 
-REM ❗ klasör adı risk-dashboard senin
 start cmd /k "cd risk-dashboard && npm run dev"
+
+REM 🔥 FRONTEND'İN AÇILMASINI BEKLE
+timeout /t 5 >nul
+
+echo =========================
+echo TARAYICI ACILIYOR
+echo =========================
+
+start http://localhost:5173
 
 echo =========================
 echo SISTEM CALISIYOR
 echo =========================
 
-pause   
+pause

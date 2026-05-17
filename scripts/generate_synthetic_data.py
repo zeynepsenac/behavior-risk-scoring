@@ -22,9 +22,9 @@ savings_rate = (1 - spending_ratio + np.random.normal(0, 0.05, N)).clip(0, 0.4)
 employment_duration = np.random.randint(3, 300, N)  
 account_age = np.random.randint(6, 240, N)  
 
-# ----------------------------
-# 🔥 RISK SCORE (unchanged logic)
-# ----------------------------
+
+#  RISK SCORE (unchanged logic)
+
 risk_score = (
     (missed_payments_6m * 12) +
     (bill_payment_delay_avg * 1.5) +
@@ -39,9 +39,9 @@ risk_band = pd.cut(
     labels=["Low", "Medium", "High"]
 )
 
-# ----------------------------
-# 🔥 NEW FEATURE: financial_resilience_score (FIX)
-# ----------------------------
+
+#  NEW FEATURE: financial_resilience_score (FIX)
+
 financial_resilience_score = (
     (savings_rate * 100) +
     (employment_duration / 12 * 5) +
@@ -58,9 +58,9 @@ financial_resilience_score = (
 
 financial_resilience_score = financial_resilience_score.round(2)
 
-# ----------------------------
+
 # DATASET
-# ----------------------------
+
 data = {
     "customer_id": range(1, N + 1),
     "monthly_income": monthly_income.round(2),
@@ -74,7 +74,7 @@ data = {
     "risk_score": risk_score.round(0),
     "risk_band": risk_band,
 
-    # 🔥 FIXED FEATURE ADDED
+    #  FIXED FEATURE ADDED
     "financial_resilience_score": financial_resilience_score
 }
 

@@ -44,7 +44,7 @@ denom = (raw_max - raw_min) + 1e-6
 preds = np.clip((raw_preds - raw_min) / denom, 0, 1)
 df["predicted_risk_score"] = preds
 
-# 🔥 FIX 1: evaluation için TRUE SCORE EKLENDİ
+# FIX 1: evaluation için TRUE SCORE 
 # (risk_score yoksa evaluation kırılmasın)
 df["risk_score"] = preds  # alias (compatibility layer)
 
@@ -123,7 +123,7 @@ for col in feature_cols:
 
     grp_mean = df.groupby(f"{col}_group")["predicted_risk_score"].transform("mean")
 
-    # 🔥 FIX 2: suffix eksikti
+    
     df[f"{col}_bias"] = df["predicted_risk_score"] - grp_mean.fillna(global_mean)
 
 # INTERSECTIONAL BIAS

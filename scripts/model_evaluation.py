@@ -73,7 +73,7 @@ y_pred = test_df["pred_label"]
 y_score = test_df["predicted_risk_score"]
 
 # =========================
-# METRICS
+# METRICS hesabı
 # =========================
 acc = accuracy_score(y_true, y_pred)
 prec = precision_score(y_true, y_pred, zero_division=0)

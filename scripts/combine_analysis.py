@@ -79,15 +79,15 @@ def analyze(df):
         print(" Veri yok")
         return
 
-    # 🔥 FIX 1: 0 artık "missing" sayılmayacak
+    #  FIX 1: 0 artık "missing" sayılmayacak
     for col in ["understanding_score", "usability_score", "trust_score", "decision_score", "prediction_score"]:
         if col not in df.columns:
-            df[col] = pd.NA   # ❌ 0 DEĞİL → TRUE missing
+            df[col] = pd.NA   #  0 DEĞİL → TRUE missing
 
-    # 🔥 FIX 2: fillna(0) kaldırıldı → veri kaybını engelliyoruz
+    #  FIX 2: fillna(0) kaldırıldı → veri kaybını engelliyoruz
     df = df.fillna(df.median(numeric_only=True))
 
-    # 🔥 FIX 3: güvenli numeric conversion
+    #  FIX 3: güvenli numeric conversion
     for col in ["understanding_score", "usability_score", "trust_score", "decision_score", "prediction_score"]:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
@@ -111,7 +111,7 @@ def analyze(df):
     print(f"- Model Güveni: {round(trust,2)} / 10")
     print(f"- Kullanılabilirlik: {round(usability,2)} / 10")
 
-    # 🔥 FIX 4: skor stabilizasyonu (NaN koruma)
+    #  FIX 4: skor stabilizasyonu (NaN koruma)
     final_score = (
         0.25 * (understanding or 0) +
         0.25 * (trust or 0) +

@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { getRiskScore } from "./services/api";
 
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+
 import GaugeChart from "./components/GaugeChart";
 import RuleScoreCard from "./components/RuleScoreCard";
 import AIExplainabilityDashboard from "./components/AIExplanation";
@@ -12,6 +15,36 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const [animatedScore, setAnimatedScore] = useState(0);
+
+  // ✅ PDF DOWNLOAD
+  const downloadPDF = async () => {
+    const element = document.getElementById("risk-report");
+
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+
+    const pdf = new jsPDF("p", "mm", "a4");
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+
+    const pdfHeight =
+      (canvas.height * pdfWidth) / canvas.width;
+
+    pdf.addImage(
+      imgData,
+      "PNG",
+      0,
+      0,
+      pdfWidth,
+      pdfHeight
+    );
+
+    pdf.save("risk-report.pdf");
+  };
 
   const fallbackData = {
     predicted_risk_score: 0.28,
@@ -33,7 +66,6 @@ export default function App() {
     );
   };
 
-  // ✅ SADECE BURASI DEĞİŞTİ
   const safeData = data ?? fallbackData;
 
   useEffect(() => {
@@ -44,10 +76,16 @@ export default function App() {
 
     const animate = (time) => {
       if (!startTime) startTime = time;
-      const progress = Math.min((time - startTime) / duration, 1);
+
+      const progress = Math.min(
+        (time - startTime) / duration,
+        1
+      );
 
       const eased = 1 - Math.pow(1 - progress, 3);
-      const value = eased * safeData.predicted_risk_score;
+
+      const value =
+        eased * safeData.predicted_risk_score;
 
       setAnimatedScore(value.toFixed(3));
 
@@ -57,6 +95,7 @@ export default function App() {
     };
 
     requestAnimationFrame(animate);
+
   }, [safeData.predicted_risk_score]);
 
   const handleFetch = async () => {
@@ -113,13 +152,14 @@ export default function App() {
     } catch (err) {
       console.error("API Error:", err);
       setData(null);
+
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div>
+    <div id="risk-report">
 
       <div className="top-panel">
         <h1>📊 Risk Kontrol Paneli</h1>
@@ -128,7 +168,14 @@ export default function App() {
           Rapor No: RISK-{id || "-"}
         </p>
 
-        <div style={{ marginTop: "18px", display: "flex", alignItems: "center", gap: "10px" }}>
+        <div
+          style={{
+            marginTop: "18px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px"
+          }}
+        >
           <input
             placeholder="Müşteri ID (1-1200)"
             value={id}
@@ -140,15 +187,15 @@ export default function App() {
             onClick={handleFetch}
             disabled={loading}
           >
-            {loading ? "Analiz ediliyor..." : "📊 Analiz Et"}
+            {loading
+              ? "Analiz ediliyor..."
+              : "📊 Analiz Et"}
           </button>
 
           <button
             className="btn-pdf"
             disabled={loading}
-            onClick={() =>
-              window.open("http://127.0.0.1:8000/report", "_blank")
-            }
+            onClick={downloadPDF}
           >
             📄 PDF Rapor
           </button>
@@ -162,7 +209,13 @@ export default function App() {
       {loading && <Skeleton />}
 
       {!loading && !data && (
-        <div style={{ color: "#6b7280", padding: "20px", textAlign: "center" }}>
+        <div
+          style={{
+            color: "#6b7280",
+            padding: "20px",
+            textAlign: "center"
+          }}
+        >
           Henüz analiz yapılmadı
         </div>
       )}
@@ -172,11 +225,16 @@ export default function App() {
 
           <div className="card score-card">
             <h2>Risk Skoru</h2>
+
             <div className="score-value">
               {safeData.predicted_risk_score !== null
                 ? animatedScore
                 : "N/A"}
             </div>
+
+            <p className="risk-info">
+              (0 ile 1 arasında normalize edilmiş skor)
+            </p>
           </div>
 
           <div className="card gauge-card">
@@ -185,12 +243,16 @@ export default function App() {
             <GaugeChart
               score={safeData.predicted_risk_score}
               predicted_band={safeData.predicted_band}
-              financial_resilience_score={safeData.financial_resilience_score}
+              financial_resilience_score={
+                safeData.financial_resilience_score
+              }
             />
           </div>
 
           <div className="card ai-card">
-            <AIExplainabilityDashboard data={safeData} />
+            <AIExplainabilityDashboard
+              data={safeData}
+            />
           </div>
 
           <div className="card rules-card">
@@ -198,7 +260,9 @@ export default function App() {
 
             <RuleScoreCard
               components={safeData.components || []}
-              model_confidence={safeData.model_confidence}
+              model_confidence={
+                safeData.model_confidence
+              }
             />
           </div>
 

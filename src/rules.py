@@ -55,7 +55,7 @@ def rule_engine(row):
     employment_duration = _get(row, "employment_duration_months")
 
     # -------------------------------------------------
-    # 🔴 NEGATIVE RULES
+    #  NEGATIVE RULES
     # -------------------------------------------------
     if spending_ratio > 0.8:
         rules.append("High spending ratio")
@@ -86,7 +86,7 @@ def rule_engine(row):
         })
 
     # -------------------------------------------------
-    # 🟢 POSITIVE RULES
+    #  POSITIVE RULES
     # -------------------------------------------------
     if savings_rate > 0.2:
         rules.append("Strong savings behavior")
@@ -120,7 +120,7 @@ def rule_engine(row):
         })
 
     # -------------------------------------------------
-    # 🔥 RULE SCORE CALCULATION (FIXED)
+    #  RULE SCORE CALCULATION (FIXED)
     # -------------------------------------------------
     rule_score = 0.0
 

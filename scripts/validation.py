@@ -47,7 +47,7 @@ FONT_PATH = Path(matplotlib.__file__).parent / "mpl-data" / "fonts" / "ttf" / "D
 
 
 # VALIDATION
-# =========================
+
 def validate_features(df):
     if df.empty:
         raise ValueError("Dataset empty")
@@ -78,9 +78,9 @@ def safe_feature(series):
     return series.replace(0, np.nan)
 
 
-# =========================
+
 # PDF
-# =========================
+
 def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
 
     try:
@@ -101,9 +101,9 @@ def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
     content.append(Paragraph("MODEL DEĞERLENDİRME RAPORU", title))
     content.append(Spacer(1, 20))
 
-    # =========================
+    
     # METRICS
-    # =========================
+    
     content.append(Paragraph(f"""
     <b>Performans Metrikleri</b><br/>
     MAE: {mae:.4f}<br/>
@@ -117,9 +117,9 @@ def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
 
     content.append(Spacer(1, 15))
 
-    # =========================
+    
     # CONFUSION MATRIX
-    # =========================
+    
     content.append(Paragraph("<b>Confusion Matrix Analizi</b>", normal))
     content.append(Image(str(REPORT_DIR / "validation_confusion_matrix.png"), width=400, height=300))
 
@@ -131,9 +131,9 @@ def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
 
     content.append(Spacer(1, 15))
 
-    # =========================
+   
     # PERFORMANCE
-    # =========================
+    
     content.append(Paragraph("<b>Performans Dağılımı</b>", normal))
     content.append(Image(str(REPORT_DIR / "validation_performance_chart.png"), width=400, height=300))
 
@@ -145,9 +145,9 @@ def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
 
     content.append(Spacer(1, 15))
 
-    # =========================
+    
     # CALIBRATION
-    # =========================
+    
     content.append(Paragraph("<b>Calibration Analizi</b>", normal))
     content.append(Image(str(REPORT_DIR / "calibration_chart.png"), width=400, height=300))
 
@@ -159,9 +159,9 @@ def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
 
     content.append(Spacer(1, 15))
 
-    # =========================
+    
     # REGRESSION
-    # =========================
+    
     content.append(Paragraph("<b>Risk Skoru Açıklama Gücü</b>", normal))
     content.append(Paragraph(
         f"R² değeri {r2:.2f} olup, modelin sürekli risk skorunu açıklama gücünün yüksek olduğunu göstermektedir. "
@@ -171,9 +171,9 @@ def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
 
     content.append(Spacer(1, 15))
 
-    # =========================
+    
     # PRIVACY
-    # =========================
+    
     anon_path = REPORT_DIR / "final_metrics_table.csv"
 
     if anon_path.exists():
@@ -194,9 +194,9 @@ def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
 
     content.append(Spacer(1, 15))
 
-    # =========================
+    
     # FINAL
-    # =========================
+    
     content.append(Paragraph("<b>Genel Değerlendirme</b>", normal))
     content.append(Paragraph(
         "Model hem sınıflandırma hem de regresyon bileşenlerinde tutarlı sonuçlar üretmektedir. "
@@ -208,9 +208,9 @@ def generate_pdf(mae, rmse, r2, acc, prec, rec, f1):
     print("PDF GENERATED")
 
 
-# =========================
+
 # MAIN
-# =========================
+
 def main():
     print("VALIDATION START")
 
@@ -230,9 +230,9 @@ def main():
         df["financial_resilience_score"].median()
     )
 
-    # =========================
+   
     # TRUE SCORE
-    # =========================
+    
     income_norm = df["income_stability_index"].fillna(df["income_stability_index"].median()) / 100
     payment_norm = df["payment_discipline_score"].fillna(df["payment_discipline_score"].median()) / 100
     resilience_norm = df["financial_resilience_score"] / 100
@@ -246,9 +246,9 @@ def main():
     threshold_true = df["true_risk_score"].quantile(0.7)
     df["true_risk_label"] = np.where(df["true_risk_score"] > threshold_true, 1, 0)
 
-    # =========================
+    
     # REGRESSION MODEL
-    # =========================
+    
     X = df[feature_cols]
     y_reg = df["true_risk_score"]
 
@@ -261,9 +261,9 @@ def main():
 
     df["regression_score"] = reg_model.predict(X)
 
-    # =========================
+    
     # CALIBRATION
-    # =========================
+    
     X_cal = df[["predicted_risk_score"]].values
     y_cal = df["true_risk_label"].values
 
@@ -272,9 +272,9 @@ def main():
 
     df["calibrated_score"] = calibrator.predict_proba(X_cal)[:, 1]
 
-    # =========================
+    
     # THRESHOLD OPTIMIZATION
-    # =========================
+    
     best_f1 = 0
     best_threshold = 0.1
 
@@ -288,9 +288,9 @@ def main():
 
     df["predicted_label"] = np.where(df["calibrated_score"] > best_threshold, 1, 0)
 
-    # =========================
+    
     # SPLIT
-    # =========================
+    
     train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
 
     y_true = test_df["true_risk_label"]
@@ -298,9 +298,9 @@ def main():
 
     y_score = test_df["regression_score"]
 
-    # =========================
+    
     # METRICS
-    # =========================
+    
     mae = mean_absolute_error(test_df["true_risk_score"], y_score)
     rmse = np.sqrt(mean_squared_error(test_df["true_risk_score"], y_score))
     r2 = r2_score(test_df["true_risk_score"], y_score)
@@ -310,9 +310,9 @@ def main():
     rec = recall_score(y_true, y_pred, zero_division=0)
     f1 = f1_score(y_true, y_pred, zero_division=0)
 
-    # =========================
+    
     # PLOTS
-    # =========================
+    
     cm = confusion_matrix(y_true, y_pred)
 
     plt.figure()
@@ -337,9 +337,9 @@ def main():
     plt.savefig(REPORT_DIR / "calibration_chart.png")
     plt.close()
 
-    # =========================
+    
     # PDF
-    # =========================
+    
     generate_pdf(mae, rmse, r2, acc, prec, rec, f1)
 
     print("VALIDATION COMPLETED")

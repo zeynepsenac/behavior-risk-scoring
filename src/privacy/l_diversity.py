@@ -27,7 +27,7 @@ def check_l_diversity(df, quasi_identifiers, sensitive_col, l=3, suppress=False)
     violations = grouped[grouped["diversity"] < l]
 
     # =========================
-    # 📊 EKSTRA METRİKLER (rapor için)
+    #  EKSTRA METRİKLER (rapor için)
     # =========================
     total_groups = len(grouped)
     violating_groups = len(violations)
@@ -48,7 +48,7 @@ def check_l_diversity(df, quasi_identifiers, sensitive_col, l=3, suppress=False)
     print(f"L value: {l}")
 
     # =========================
-    # 🔥 OPSİYONEL: SUPPRESSION
+    #  OPSİYONEL: SUPPRESSION
     # =========================
     if suppress and violating_groups > 0:
         print("Applying suppression...")

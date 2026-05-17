@@ -12,7 +12,7 @@ params = urllib.parse.quote_plus(
 
 engine = create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
 
-# CSV okunuyor (AYNI KALIYOR)
+# CSV okunuyor 
 df = pd.read_csv("data/engineered_customers.csv")
 
 

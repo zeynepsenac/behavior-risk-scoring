@@ -26,9 +26,9 @@ from src.rules import rule_engine
 from pydantic import BaseModel
 
 
-# =========================
+
 # MODELS
-# =========================
+
 class FeatureExplanation(BaseModel):
     feature: str
     value: float
@@ -74,9 +74,9 @@ class RiskResponse(BaseModel):
     score_metadata: Dict[str, Any]
 
 
-# =========================
+
 # PATHS
-# =========================
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 MODEL_METADATA_PATH = BASE_DIR / "models" / "metadata.json"
@@ -84,9 +84,9 @@ MODEL_PATH = BASE_DIR / "models" / "risk_model_v2.pkl"
 MODEL_METRICS_PATH = BASE_DIR / "models" / "model_metrics_v2.json"
 
 
-# =========================
+
 # FEATURES
-# =========================
+
 FEATURES_V2 = [
     "payment_discipline_score",
     "income_stability_index",
@@ -94,9 +94,9 @@ FEATURES_V2 = [
 ]
 
 
-# =========================
+
 # METADATA
-# =========================
+
 def load_model_metadata():
     if not MODEL_METADATA_PATH.exists():
         raise HTTPException(500, "Model metadata file not found")
@@ -118,9 +118,9 @@ FEATURE_VERSION = MODEL_METADATA.get("feature_version", "v1")
 DATASET_VERSION = MODEL_METADATA.get("dataset_version", "v1")
 
 
-# =========================
+
 # MODEL LOAD
-# =========================
+
 def load_model():
     print("MODEL PATH:", MODEL_PATH)
     print("MODEL VERSION:", MODEL_VERSION)
@@ -138,9 +138,9 @@ MODEL = load_model()
 print("MODEL:", MODEL)
 
 
-# =========================
+
 # SIMPLE EXPLAINABILITY (FIXED)
-# =========================
+
 def generate_simple_explanation(features):
     explanations = []
 
@@ -160,7 +160,7 @@ def generate_simple_explanation(features):
             "impact": -0.05
         })
 
-    # 🔥 FIX: yanlış default 0 kaldırıldı
+    
     if resilience is not None and resilience < 20:
         explanations.append({
             "feature": "financial_resilience_score",
@@ -176,9 +176,9 @@ def generate_simple_explanation(features):
     return explanations
 
 
-# =========================
-# 🔥 FEATURE VALIDATION (NEW)
-# =========================
+
+#  FEATURE VALIDATION (NEW)
+
 def validate_features(features: Dict[str, Any]):
 
     missing = [f for f in FEATURES_V2 if f not in features]
@@ -189,7 +189,7 @@ def validate_features(features: Dict[str, Any]):
             detail=f"Missing features: {missing}"
         )
 
-    # 🔥 CRITICAL GUARD
+    #  CRITICAL GUARD
     if features.get("financial_resilience_score") in [None, 0]:
         raise HTTPException(
             status_code=500,
@@ -306,7 +306,7 @@ def fetch_customer_features(customer_id: int):
         features = dict(zip(FEATURES, row))
 
         
-        #  SAFE POST-PROCESSING FIX
+        
        
 
         # financial_resilience_score guard (FIXED)
@@ -559,7 +559,7 @@ def save_prediction(
     finally:
         conn.close()
 
-# 🔥 EXPLAINABILITY FUNCTIONS
+#  EXPLAINABILITY FUNCTIONS
 
 def generate_feature_explanations(features: dict):
     explanations = []
@@ -619,7 +619,7 @@ def generate_feature_explanations(features: dict):
     return explanations
 
 
-# 🔥 SUMMARY FUNCTION (FIXED + GELİŞTİRİLDİ)
+#  SUMMARY FUNCTION (FIXED + GELİŞTİRİLDİ)
 
 def build_explanation_summary(explanations: list, features: dict = None):
 
@@ -648,7 +648,7 @@ def build_explanation_summary(explanations: list, features: dict = None):
         else:
             base_text = " ve ".join(parts).capitalize() + "."
 
-        # 🔥 YENİ EKLENTİ (SENİN İSTEDİĞİN JÜRİ FIX)
+        
         if features is not None:
             resilience = float(features.get("financial_resilience_score", 0) or 0)
 
@@ -659,7 +659,7 @@ def build_explanation_summary(explanations: list, features: dict = None):
 
     except Exception:
         return "Model finansal davranışları analiz eder."
-# 🔥 MAIN FUNCTION (FULL FIXED)
+#  MAIN FUNCTION (FULL FIXED)
 def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
 
     import numpy as np
@@ -691,17 +691,17 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
         "financial_resilience_score"
     ]
 
-    # -----------------------------
+    
     # SAFE MISSING CHECK
-    # -----------------------------
+   
     missing_data = any(
         features.get(f) is None
         for f in FEATURE_ORDER
     )
 
-    # -----------------------------
+    
     # INPUT VECTOR
-    # -----------------------------
+    
     input_vector = np.array([[
         float(features.get(f) if features.get(f) is not None else 0.0)
         for f in FEATURE_ORDER
@@ -716,9 +716,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
         except:
             return 0.0
 
-    # -----------------------------
+    
     # RAW VALUES
-    # -----------------------------
+    
     payment_raw = float(features.get("payment_discipline_score") or 0.0)
     income_raw = float(features.get("income_stability_index") or 0.0)
 
@@ -729,9 +729,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
     else:
         resilience_raw = float(resilience_raw)
 
-    # -----------------------------
+    
     # NORMALIZATION
-    # -----------------------------
+    
     payment_norm = normalize_100_to_1(payment_raw)
     income_norm = normalize_100_to_1(income_raw)
 
@@ -742,9 +742,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
 
     model_input = np.array([[payment_norm, income_norm, resilience_norm]])
 
-    # -----------------------------
+    
     # RULE ENGINE
-    # -----------------------------
+    
     try:
         if missing_data:
             raise ValueError("Skipping rule engine due to missing data")
@@ -763,9 +763,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
         rules = []
         rule_score = 0.0
 
-    # -----------------------------
+    
     # ORIGINAL SCORE
-    # -----------------------------
+    
     try:
         original_score, _ = fetch_original_risk(customer_id)
     except Exception:
@@ -776,9 +776,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
 
     original_band = calculate_risk_band(original_score)["band"]
 
-    # -----------------------------
+    
     # ML PREDICTION
-    # -----------------------------
+    
     predicted_score = None
 
     if not missing_data:
@@ -847,9 +847,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
         agreement=(original_band.lower() == band.lower())
     )
 
-    # -----------------------------
+    
     # BASE VALUE
-    # -----------------------------
+    
     try:
         if X_TRAIN_SCALED is not None and not missing_data:
             if hasattr(MODEL, "predict_proba"):
@@ -865,9 +865,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
         print(" base_value hesaplanamadı:", e)
         base_value = float(ml_score)
 
-    # -----------------------------
+    
     # COMPONENTS
-    # -----------------------------
+    
     components = RiskComponents(
         payment_discipline_score=round(payment_norm, 3),
         income_stability_index=round(income_norm, 3),
@@ -883,12 +883,12 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
 
     feature_explanations = generate_feature_explanations(features)
 
-    #  BURASI GÜNCELLENDİ
+    
     summary = build_explanation_summary(feature_explanations, features)
 
-    # -----------------------------
+    
     # WARNINGS
-    # -----------------------------
+    
     warnings = []
 
     if missing_data:
@@ -902,9 +902,9 @@ def calculate_risk(customer_id: int, explain: bool = True) -> RiskResponse:
             "Model düşük risk tahmin ediyor ancak finansal dayanıklılık 0."
         )
 
-    # -----------------------------
+    
     # RESPONSE
-    # -----------------------------
+    
     response_data = {
         "customer_id": customer_id,
 
@@ -1027,7 +1027,7 @@ def simple_risk(customer_id: int):
     try:
         result = calculate_risk(customer_id, explain=False)
 
-        #  WARNING (FIXED → final_score kullan)
+        
         warning = None
         try:
             if result.financial_resilience_score == 0 and result.final_score < 0.3:
@@ -1036,7 +1036,7 @@ def simple_risk(customer_id: int):
             warning = None
 
         return SimpleRiskResponse(
-            #  KRİTİK FIX
+            
             risk_score=result.final_score,   #  predicted değil
 
             risk_band=result.risk_band,
@@ -1057,7 +1057,7 @@ def simple_risk(customer_id: int):
             confidence=0.0,
             warning="Fallback response"
         )
-# HELPERS (EKLENDİ - MINIMAL FIX)
+# HELPERS 
 
 
 def normalize_rule_score(rule_score: float) -> float:
@@ -1142,16 +1142,15 @@ from pathlib import Path
 import subprocess
 import sys
 
-# BASE_DIR zaten sende var (değiştirme)
-# BASE_DIR = Path(__file__).resolve().parents[1]
 
-#  PDF DOSYA YOLU (SENİN GERÇEK OLUŞTURDUĞUN YER)
+
+#  PDF DOSYA YOLU 
 PDF_PATH = BASE_DIR / "reports" / "model_evaluation_report.pdf"
 
 
-# =========================
+
 # PDF GÖSTER
-# =========================
+
 @app.get("/report", tags=["Report"])
 def get_report():
 
@@ -1169,9 +1168,9 @@ def get_report():
     )
 
 
-# =========================
+
 # PDF OLUŞTUR
-# =========================
+
 @app.get("/generate-report", tags=["Report"])
 def generate_report():
     try:
@@ -1185,7 +1184,7 @@ def generate_report():
             check=True
         )
 
-        # 🔥 KRİTİK FIX:
+        
         # script bittikten sonra doğru dosya kontrolü
         if not PDF_PATH.exists():
             raise HTTPException(
@@ -1281,7 +1280,7 @@ def get_prediction_history(customer_id: int):
                 "predicted_risk_score": score,
                 "original_band": r[2],
 
-                #  ARTIK HER ZAMAN DOĞRU SCALE
+            
                 "predicted_band": recalculated_band,
 
                 "model_version": model_version,
@@ -1337,7 +1336,7 @@ def get_model_metrics():
 
 
 
-# V2 ENDPOINT (FIXED - STABLE)
+# V2 ENDPOINT 
 
 @app.get("/risk-score-v2/{customer_id}", tags=["Scoring V2"])
 def risk_score_v2(customer_id: int):
@@ -1499,7 +1498,7 @@ def explain_prediction(customer_id: int):
             #  ARTIK MODEL İLE SENKRON
             "prediction": result.risk_band,
 
-            #  bonus (istersen ekle)
+            
             "prediction_score": result.predicted_risk_score,
 
             "top_positive_factors": positives,

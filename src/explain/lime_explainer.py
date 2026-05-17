@@ -19,7 +19,7 @@ FEATURES = [
 try:
     X_TRAIN_SCALED = joblib.load("models/X_train_scaled_v2.pkl")
 except Exception as e:
-    print("⚠️ X_train_scaled yüklenemedi:", e)
+    print(" X_train_scaled yüklenemedi:", e)
     X_TRAIN_SCALED = None
 
 
@@ -29,7 +29,7 @@ except Exception as e:
 try:
     scaler = joblib.load("models/scaler_v2.pkl")
 except Exception as e:
-    print("⚠️ scaler yüklenemedi:", e)
+    print(" scaler yüklenemedi:", e)
     scaler = None
 
 

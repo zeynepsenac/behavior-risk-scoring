@@ -32,7 +32,7 @@ class FeatureContribution(BaseModel):
 
 
 # =====================================================
-# 🔥 FIX: FULL EXPLANATION MODEL (API İLE UYUMLU)
+#  FIX: FULL EXPLANATION MODEL 
 # =====================================================
 
 class FeatureExplanation(BaseModel):
@@ -61,7 +61,7 @@ class ModelInfo(BaseModel):
 
 
 # =====================================================
-# MAIN RESPONSE (FIXED)
+# MAIN RESPONSE 
 # =====================================================
 
 class RiskResponse(BaseModel):
@@ -76,12 +76,12 @@ class RiskResponse(BaseModel):
     components: Optional[RiskComponents] = None
     label_comparison: Optional[LabelComparison] = None
 
-    # 🔥 FIX: mutable default kaldırıldı
+    #  FIX: mutable default kaldırıldı
     feature_contributions: Optional[List[FeatureContribution]] = Field(default_factory=list)
 
     feature_importance: Optional[Dict[str, float]] = Field(default_factory=dict)
 
-    # 🔥 FIX: doğru model kullanıldı
+    #  FIX: doğru model kullanıldı
     explanations: Optional[List[FeatureExplanation]] = Field(default_factory=list)
 
     rule_explanations: Optional[List[RuleItem]] = Field(default_factory=list)
@@ -98,7 +98,7 @@ class RiskResponse(BaseModel):
 
     model_confidence: Optional[float] = None
 
-    # 🔥 FIX: mutable default kaldırıldı
+    #  FIX: mutable default kaldırıldı
     warnings: Optional[List[str]] = Field(default_factory=list)
 
 

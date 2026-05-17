@@ -47,7 +47,6 @@ correct = (df[prediction_col].str.upper() == "MEDIUM").mean() * 10
 print(" Model Güveni:", round(correct, 2), "/10")
 
 
-#  Karar verilebilirlik (FIX)
 
 
 # kolon adını otomatik bul (birebir eşleşme sorunu çözülür)

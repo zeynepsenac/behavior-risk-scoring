@@ -115,7 +115,7 @@ def format_lime_output(lime_list):
 
             # FIX: DO NOT BREAK FEATURE NAME
             formatted.append({
-                "feature": str(feature),   # ❌ removed .split(" ")[0]
+                "feature": str(feature),   #  removed .split(" ")[0]
                 "impact": round(impact, 4)
             })
 

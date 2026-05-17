@@ -86,9 +86,9 @@ else:
 
         print(f"Suppression kaldırılan: {before_suppression - after_suppression}")
 
-# =========================
+
 #  L-DIVERSITY FIXED
-# =========================
+
 if quasi_identifiers and "risk_score" in anon_df.columns:
 
     #  FIX 2: L=2 → L=3
@@ -119,9 +119,9 @@ if quasi_identifiers and "risk_score" in anon_df.columns:
 
         print(f"L-suppression: {before_l - after_l}")
 
-# =========================
+
 # VERİ KALİTESİ
-# =========================
+
 final_size = len(anon_df)
 
 loss_ratio = 0
@@ -135,9 +135,9 @@ group_sizes = anon_df.groupby(quasi_identifiers).size()
 avg_group = round(group_sizes.mean(), 2)
 min_group = int(group_sizes.min())
 
-# ================================
+
 # RISK MODEL
-# ================================
+
 singleton_ratio = (group_sizes == 1).sum() / len(group_sizes)
 small_group_ratio = (group_sizes < 3).sum() / len(group_sizes)
 unique_ratio = len(group_sizes.unique()) / len(group_sizes)
@@ -152,9 +152,9 @@ distinct_risk_score = int(anon_df["risk_score"].nunique())
 
 print(avg_group, min_group, risk, distinct_risk_score)
 
-# =========================
+
 # TABLO
-# =========================
+
 report_df = pd.DataFrame([
     ["Original Records", int(original_size)],
     ["Final Records", int(final_size)],
@@ -172,9 +172,9 @@ print(report_df)
 Path("reports").mkdir(exist_ok=True)
 report_df.to_csv("reports/final_metrics_table.csv", index=False)
 
-# =========================
+
 # GRAFİK
-# =========================
+
 plt.figure(figsize=(10, 5))
 
 metrics_to_plot = {
@@ -191,9 +191,9 @@ plt.ylabel("Value")
 plt.savefig("reports/metrics_plot.png")
 plt.close()
 
-# =========================
+
 # SAVE
-# =========================
+
 anon_df.to_csv("data/anonymized_customers.csv", index=False)
 
 print("\n Pipeline tamamlandı")
